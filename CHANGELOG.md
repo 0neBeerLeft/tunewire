@@ -5,8 +5,12 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 ## Unreleased
 
-**New: Discover**
-- A Discover page in the sidebar: moods and genres, "Because you listened to…" picks, artists like the ones you play, new albums and singles, and what's trending, with a Surprise me button
+**New: Discover, made from your taste**
+- A Discover page in the sidebar, built from the artists and songs you play most, your liked songs and the artists you follow
+- Picked for you: songs that fit everything you like, new every day
+- "Because you listened to…" rows, new releases from your artists and the artists closest to them, and artists you might like (with who they're like)
+- New here? Pick a few artists you like and the page fills up right away
+- Surprise me plays something new that fits your taste
 
 **Sound**
 - Fixed songs sometimes sounding distorted and "bass boosted". Songs with a quiet intro were turned up for their whole length; loudness is now measured on the loud part of the song, songs are turned up at most a little, and a smooth limiter replaces the hard clipping

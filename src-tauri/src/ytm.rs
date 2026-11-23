@@ -753,6 +753,21 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn live_artist_releases() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _g = rt.enter();
+        let (id, _) = rt.block_on(find_artist("Dua Lipa")).unwrap();
+        let a = rt.block_on(artist(&id)).unwrap();
+        for c in a.singles.iter().chain(&a.albums).take(10) {
+            println!("{:<7} {} | {:?}", c.kind, c.title, c.subtitle);
+        }
+        for c in a.related.iter().take(3) {
+            println!("related {} | {:?} | {:?}", c.title, c.subtitle, c.browse_id);
+        }
+    }
+
+    #[test]
+    #[ignore]
     fn live_new_releases() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _g = rt.enter();

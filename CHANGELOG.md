@@ -3,7 +3,7 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## Unreleased
+## v2.2.1
 
 **The whole app matches the background**
 - Panels, menus, text and highlights take their colors from the background: the playing song's cover, or your own picture, fading from song to song. Settings → Appearance → Colors from the background

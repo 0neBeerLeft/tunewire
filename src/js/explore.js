@@ -298,7 +298,7 @@ function paletteVars(hex, surfaces) {
   if (surfaces) {
     const light = document.documentElement.dataset.mode === 'light';
     // Muted: enough to belong with the picture, not enough to shout.
-    const t = Math.min(0.55, s0) * (light ? 0.5 : 0.62);
+    const t = Math.min(0.6, s0) * (light ? 0.55 : 0.78);
     const L = light
       ? { bg: 0.955, elev: 0.985, elev2: 0.925, hover: 0.94, sel: 0.89, border: 0.86, text: 0.12, dim: 0.38, faint: 0.56 }
       : { bg: 0.07, elev: 0.1, elev2: 0.14, hover: 0.13, sel: 0.19, border: 0.17, text: 0.93, dim: 0.7, faint: 0.47 };

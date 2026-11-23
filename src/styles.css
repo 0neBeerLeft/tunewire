@@ -882,7 +882,7 @@ h2 { font-size: 20px; font-weight: 750; letter-spacing: -.01em; }
 .tb-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; letter-spacing: -.01em; margin-right: 10px; white-space: nowrap; }
 .tb-wire { color: var(--accent); }
 /* The logo's shape in the theme's colors (a mask), so it fits every theme. */
-.tb-logo { width: 44px; height: 20px; background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 70%, var(--text)), var(--accent)); -webkit-mask: url(img/logo-mark.png) center / contain no-repeat; mask: url(img/logo-mark.png) center / contain no-repeat; }
+.tb-logo { width: 24px; height: 22px; background: linear-gradient(45deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #fff)); -webkit-mask: url(img/logo-mark.svg) center / contain no-repeat; mask: url(img/logo-mark.svg) center / contain no-repeat; }
 .tb-nav, .tb-btn { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); background: color-mix(in srgb, var(--bg) 70%, transparent); position: relative; }
 .tb-nav:hover:not(:disabled), .tb-btn:hover { color: var(--text); transform: scale(1.05); }
 .tb-nav:disabled { opacity: .35; }
@@ -1769,3 +1769,15 @@ body.dragging-tracks .track:hover { background: transparent; }
 @property --accent { syntax: '<color>'; inherits: true; initial-value: #e5a54b; }
 :root { transition: --bg 1.2s ease, --bg-elev 1.2s ease, --bg-elev-2 1.2s ease, --surface-hover 1.2s ease, --selected 1.2s ease, --border 1.2s ease, --text 1.2s ease, --text-dim 1.2s ease, --text-faint 1.2s ease, --accent 1.2s ease; }
 @media (prefers-reduced-motion: reduce) { :root { transition: none; } }
+
+/* Dialogs, menus and suggestions carry the background's color too: a glow of
+   the accent at the top, a tinted edge, and a backdrop of the app's own
+   color instead of plain black. */
+.modal, .menu, .suggest {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 13%, var(--panel-solid)), var(--panel-solid) 160px) !important;
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border)) !important;
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--bg) 70%, #000), 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.menu { background: color-mix(in srgb, var(--accent) 9%, var(--panel-solid)) !important; }
+.modal-backdrop { background: color-mix(in srgb, var(--bg) 62%, transparent); backdrop-filter: blur(6px) saturate(1.2); -webkit-backdrop-filter: blur(6px) saturate(1.2); }
+.modal footer .btn.primary, .modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }

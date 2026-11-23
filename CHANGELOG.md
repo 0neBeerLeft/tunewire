@@ -3,7 +3,7 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## Unreleased
+## v2.3.0
 
 **New design**
 - A black-and-white glass look, with adjustable glass transparency and a Daily Mix banner on Home

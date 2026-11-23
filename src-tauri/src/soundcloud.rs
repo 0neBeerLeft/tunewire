@@ -4,6 +4,7 @@
 //! on disk; a 401/403 means it rotated, so it's fetched again.
 //! Everything falls back to yt-dlp if this fails.
 
+use crate::sync_ext::LockExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -23,10 +24,10 @@ pub fn init(dir: &std::path::Path) {
     if let Ok(id) = std::fs::read_to_string(&path) {
         let id = id.trim().to_string();
         if id.len() == 32 {
-            *CLIENT_ID.lock().unwrap() = Some(id);
+            *CLIENT_ID.locked() = Some(id);
         }
     }
-    *CACHE_FILE.lock().unwrap() = Some(path);
+    *CACHE_FILE.locked() = Some(path);
 }
 
 fn get_text(url: &str) -> AppResult<(u16, String)> {
@@ -58,7 +59,7 @@ fn fetch_client_id() -> AppResult<String> {
         if let Some(i) = js.find("client_id:\"").or_else(|| js.find("client_id=\"")) {
             let id: String = js[i + 11..].chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
             if id.len() == 32 {
-                if let Some(p) = CACHE_FILE.lock().unwrap().as_ref() {
+                if let Some(p) = CACHE_FILE.locked().as_ref() {
                     let _ = std::fs::write(p, &id);
                 }
                 return Ok(id);
@@ -70,12 +71,12 @@ fn fetch_client_id() -> AppResult<String> {
 
 fn client_id(force: bool) -> AppResult<String> {
     if !force {
-        if let Some(id) = CLIENT_ID.lock().unwrap().clone() {
+        if let Some(id) = CLIENT_ID.locked().clone() {
             return Ok(id);
         }
     }
     let id = fetch_client_id()?;
-    *CLIENT_ID.lock().unwrap() = Some(id.clone());
+    *CLIENT_ID.locked() = Some(id.clone());
     Ok(id)
 }
 

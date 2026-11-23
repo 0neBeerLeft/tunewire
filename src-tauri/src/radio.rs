@@ -1,6 +1,7 @@
 //! Autoplay / radio: related songs from YouTube Music's automatic mix
 //! ("RDAMVM" + video id), fetched with yt-dlp like any playlist.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -161,13 +162,13 @@ const MIX_TTL_SECS: u64 = 30 * 60;
 
 /// A seed's whole mix (cached), in YouTube Music's order.
 async fn mix(seed: &Track, cache: &Arc<SearchCache>) -> AppResult<Vec<Track>> {
-    if let Some((t, v)) = MIXES.lock().unwrap().as_ref().and_then(|m| m.get(&seed.key).cloned()) {
+    if let Some((t, v)) = MIXES.locked().as_ref().and_then(|m| m.get(&seed.key).cloned()) {
         if t.elapsed().as_secs() < MIX_TTL_SECS {
             return Ok(v);
         }
     }
     let v = related(seed, &HashSet::new(), 30, cache).await?;
-    let mut guard = MIXES.lock().unwrap();
+    let mut guard = MIXES.locked();
     let m = guard.get_or_insert_with(HashMap::new);
     if m.len() > 300 {
         m.clear();

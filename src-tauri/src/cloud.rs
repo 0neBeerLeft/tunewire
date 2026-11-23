@@ -19,6 +19,7 @@
 //! the protecting). They're baked in at build time (TUNEWIRE_SUPABASE_URL,
 //! TUNEWIRE_SUPABASE_ANON_KEY) or set in settings for development.
 
+use crate::sync_ext::LockExt;
 use std::io::Write;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -117,16 +118,16 @@ static FROZEN: AtomicBool = AtomicBool::new(false);
 static FALLBACK_FILE: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
 
 pub fn init(dir: &std::path::Path, settings_url: &str, settings_key: &str) {
-    *FALLBACK_FILE.lock().unwrap() = Some(dir.join("cloud_session"));
+    *FALLBACK_FILE.locked() = Some(dir.join("cloud_session"));
     // Development only: in a release, settings (which the page can change)
     // must never be able to send the sign-in token to another server.
     if cfg!(debug_assertions) && !settings_url.is_empty() && !settings_key.is_empty() {
-        *OVERRIDE.lock().unwrap() = Some(CloudConfig { url: settings_url.trim_end_matches('/').to_string(), anon_key: settings_key.to_string(), share_url: share_url() });
+        *OVERRIDE.locked() = Some(CloudConfig { url: settings_url.trim_end_matches('/').to_string(), anon_key: settings_key.to_string(), share_url: share_url() });
     }
 }
 
 pub fn config() -> Option<CloudConfig> {
-    if let Some(c) = OVERRIDE.lock().unwrap().clone() {
+    if let Some(c) = OVERRIDE.locked().clone() {
         return Some(c);
     }
     match (option_env!("TUNEWIRE_SUPABASE_URL"), option_env!("TUNEWIRE_SUPABASE_ANON_KEY")) {
@@ -158,7 +159,7 @@ fn token_tag(refresh: &str) -> String {
 }
 
 fn session_file() -> Option<std::path::PathBuf> {
-    FALLBACK_FILE.lock().unwrap().as_ref().map(|p| p.with_file_name("cloud_session.json"))
+    FALLBACK_FILE.locked().as_ref().map(|p| p.with_file_name("cloud_session.json"))
 }
 
 /// Write `data` readable by this user only.
@@ -176,7 +177,7 @@ fn write_private(path: &std::path::Path, data: &[u8]) {
 }
 
 fn save_stored(st: &Stored) {
-    let file = FALLBACK_FILE.lock().unwrap().clone();
+    let file = FALLBACK_FILE.locked().clone();
     if crate::secrets::set(KEY_REFRESH, &st.refresh).is_ok() {
         if let Some(p) = &file {
             let _ = std::fs::remove_file(p);
@@ -192,7 +193,7 @@ fn save_stored(st: &Stored) {
 }
 
 fn load_stored() -> Option<Stored> {
-    let file = FALLBACK_FILE.lock().unwrap().as_ref().and_then(|p| std::fs::read_to_string(p).ok());
+    let file = FALLBACK_FILE.locked().as_ref().and_then(|p| std::fs::read_to_string(p).ok());
     let refresh = file.filter(|s| !s.trim().is_empty()).or_else(|| crate::secrets::get(KEY_REFRESH))?.trim().to_string();
     if refresh.is_empty() {
         return None;
@@ -210,7 +211,7 @@ fn clear_refresh() {
     let _ = crate::secrets::set(KEY_REFRESH, "");
     // Separate statements: a lock guard lives until the end of its statement,
     // and session_file() takes the same lock.
-    let token_file = FALLBACK_FILE.lock().unwrap().clone();
+    let token_file = FALLBACK_FILE.locked().clone();
     let files = [token_file, session_file()];
     for p in files.into_iter().flatten() {
         let _ = std::fs::remove_file(p);
@@ -289,7 +290,7 @@ fn adopt(v: &Value) -> AppResult<CloudSession> {
     if user.get("is_anonymous").and_then(Value::as_bool).unwrap_or(false) {
         // Guest accounts are gone: an old guest session just ends.
         clear_refresh();
-        *SESSION.lock().unwrap() = None;
+        *SESSION.locked() = None;
         return Err(AppError::Unavailable("guest accounts are no longer supported; sign in with Discord".into()));
     }
     let meta = user.get("user_metadata").cloned().unwrap_or(Value::Null);
@@ -308,7 +309,7 @@ fn adopt(v: &Value) -> AppResult<CloudSession> {
     if !refresh.is_empty() {
         save_stored(&Stored { refresh: refresh.clone(), session: Some(session.clone()) });
     }
-    *SESSION.lock().unwrap() = Some(Inner { session: session.clone(), refresh });
+    *SESSION.locked() = Some(Inner { session: session.clone(), refresh });
     Ok(session)
 }
 
@@ -332,7 +333,7 @@ pub fn sign_in_blocking(provider: &str) -> AppResult<CloudSession> {
 }
 
 fn fresh_session() -> Option<CloudSession> {
-    SESSION.lock().unwrap().as_ref().map(|i| i.session.clone()).filter(|s| s.expires_at > now_ms() + 120_000)
+    SESSION.locked().as_ref().map(|i| i.session.clone()).filter(|s| s.expires_at > now_ms() + 120_000)
 }
 
 /// A valid session (refreshed when close to expiry), if signed in.
@@ -348,7 +349,7 @@ pub fn session_blocking() -> AppResult<Option<CloudSession>> {
     if let Some(s) = fresh_session() {
         return Ok(Some(s));
     }
-    let current = SESSION.lock().unwrap().as_ref().filter(|i| !i.refresh.is_empty()).map(|i| Stored { refresh: i.refresh.clone(), session: Some(i.session.clone()) });
+    let current = SESSION.locked().as_ref().filter(|i| !i.refresh.is_empty()).map(|i| Stored { refresh: i.refresh.clone(), session: Some(i.session.clone()) });
     let first = current.is_none();
     let Some(stored) = current.or_else(load_stored) else {
         return Ok(None);
@@ -358,7 +359,7 @@ pub fn session_blocking() -> AppResult<Option<CloudSession>> {
     // good, so nothing is spent.
     if first {
         if let Some(s) = still_valid(&stored) {
-            *SESSION.lock().unwrap() = Some(Inner { session: s.clone(), refresh: stored.refresh });
+            *SESSION.locked() = Some(Inner { session: s.clone(), refresh: stored.refresh });
             return Ok(Some(s));
         }
     }
@@ -373,7 +374,7 @@ pub fn session_blocking() -> AppResult<Option<CloudSession>> {
             // already replaced it: a newer saved token isn't "signed out".
             if let Some(newer) = load_stored().filter(|n| n.refresh != stored.refresh) {
                 if let Some(s) = still_valid(&newer) {
-                    *SESSION.lock().unwrap() = Some(Inner { session: s.clone(), refresh: newer.refresh });
+                    *SESSION.locked() = Some(Inner { session: s.clone(), refresh: newer.refresh });
                     return Ok(Some(s));
                 }
                 match refresh_with(&newer.refresh) {
@@ -385,14 +386,14 @@ pub fn session_blocking() -> AppResult<Option<CloudSession>> {
             // The session really ended (revoked, expired, used elsewhere).
             let _ = e;
             clear_refresh();
-            *SESSION.lock().unwrap() = None;
+            *SESSION.locked() = None;
             Ok(None)
         }
         // Offline or server trouble: keep the refresh token for next time,
         // and keep using the access token while it lasts.
         Err(AuthFail::Other(e)) => match stored.session.filter(|s| s.expires_at > now_ms() + 5_000) {
             Some(s) => {
-                *SESSION.lock().unwrap() = Some(Inner { session: s.clone(), refresh: stored.refresh });
+                *SESSION.locked() = Some(Inner { session: s.clone(), refresh: stored.refresh });
                 Ok(Some(s))
             }
             None => Err(e),
@@ -408,7 +409,7 @@ fn refresh_with(refresh: &str) -> Result<Option<CloudSession>, AuthFail> {
 }
 
 pub fn sign_out_blocking() {
-    let token = SESSION.lock().unwrap().take().map(|i| i.session.access_token);
+    let token = SESSION.locked().take().map(|i| i.session.access_token);
     if let Some(t) = token {
         let _ = post("/auth/v1/logout", serde_json::json!({}), Some(&t));
     }
@@ -476,10 +477,10 @@ mod tests {
         use crate::secrets::fake::BROKEN;
         let dir = std::env::temp_dir().join(format!("tw-cloud-{}", now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
-        *FALLBACK_FILE.lock().unwrap() = Some(dir.join("cloud_session"));
+        *FALLBACK_FILE.locked() = Some(dir.join("cloud_session"));
         // Nothing listens here: any refresh attempt fails with a network error.
-        *OVERRIDE.lock().unwrap() = Some(CloudConfig { url: "http://127.0.0.1:9".into(), anon_key: "k".into(), share_url: String::new() });
-        let restart = || *SESSION.lock().unwrap() = None;
+        *OVERRIDE.locked() = Some(CloudConfig { url: "http://127.0.0.1:9".into(), anon_key: "k".into(), share_url: String::new() });
+        let restart = || *SESSION.locked() = None;
 
         // Saved with its session; read back as long as it's the same token.
         save_stored(&Stored { refresh: "r1".into(), session: Some(fake_session(3_600_000)) });
@@ -528,7 +529,7 @@ mod tests {
 
         clear_refresh();
         assert!(load_stored().is_none());
-        *OVERRIDE.lock().unwrap() = None;
+        *OVERRIDE.locked() = None;
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -539,8 +540,8 @@ mod tests {
     #[ignore]
     fn live_replaced_token_is_not_a_sign_out() {
         let _g = globals();
-        *OVERRIDE.lock().unwrap() = Some(CloudConfig { url: std::env::var("SB_URL").unwrap(), anon_key: std::env::var("SB_ANON").unwrap(), share_url: String::new() });
-        *FALLBACK_FILE.lock().unwrap() = Some(std::env::temp_dir().join(format!("tw-cloud-live-{}", now_ms())));
+        *OVERRIDE.locked() = Some(CloudConfig { url: std::env::var("SB_URL").unwrap(), anon_key: std::env::var("SB_ANON").unwrap(), share_url: String::new() });
+        *FALLBACK_FILE.locked() = Some(std::env::temp_dir().join(format!("tw-cloud-live-{}", now_ms())));
         let grant = post("/auth/v1/token?grant_type=password", serde_json::json!({ "email": std::env::var("SB_EMAIL").unwrap(), "password": std::env::var("SB_PASSWORD").unwrap() }), None)
             .unwrap_or_else(|_| panic!("password sign-in"));
         let t1 = grant["refresh_token"].as_str().unwrap().to_string();
@@ -551,7 +552,7 @@ mod tests {
         std::thread::sleep(Duration::from_secs(12));
         save_stored(&Stored { refresh: t2.clone(), session: None });
         // This run still holds t1 (read before the other run saved).
-        *SESSION.lock().unwrap() = Some(Inner { session: fake_session(0), refresh: t1 });
+        *SESSION.locked() = Some(Inner { session: fake_session(0), refresh: t1 });
         let s = session_blocking().expect("no error").expect("still signed in");
         assert!(!s.user_id.is_empty());
         // What's saved still works (whether the server answered t1 with t2's
@@ -568,8 +569,8 @@ mod tests {
         let _g = globals();
         let url = std::env::var("SB_URL").unwrap();
         let key = std::env::var("SB_ANON").unwrap();
-        *OVERRIDE.lock().unwrap() = Some(CloudConfig { url, anon_key: key, share_url: String::new() });
-        *FALLBACK_FILE.lock().unwrap() = Some(std::env::temp_dir().join("tw-cloud-test"));
+        *OVERRIDE.locked() = Some(CloudConfig { url, anon_key: key, share_url: String::new() });
+        *FALLBACK_FILE.locked() = Some(std::env::temp_dir().join("tw-cloud-test"));
         // Needs a Discord sign-in first (SB_REFRESH = a refresh token).
         let refresh = std::env::var("SB_REFRESH").unwrap();
         save_stored(&Stored { refresh, session: None });

@@ -1,6 +1,7 @@
 //! Listening stats: a play log of how long each song was actually listened to
 //! (plays.jsonl, one line per listen), and the summaries built from it.
 
+use crate::sync_ext::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -63,7 +64,7 @@ fn log_path(dir: &Path) -> PathBuf {
 
 /// Load the log (importing the old history once, so stats aren't empty on day one).
 pub fn init(dir: &Path, history: &[crate::store::HistoryEntry]) {
-    *DIR.lock().unwrap() = Some(dir.to_path_buf());
+    *DIR.locked() = Some(dir.to_path_buf());
     let path = log_path(dir);
     if !path.exists() && !history.is_empty() {
         let mut out = String::new();
@@ -80,7 +81,7 @@ pub fn init(dir: &Path, history: &[crate::store::HistoryEntry]) {
 }
 
 fn load() -> Vec<Play> {
-    let Some(dir) = DIR.lock().unwrap().clone() else {
+    let Some(dir) = DIR.locked().clone() else {
         return Vec::new();
     };
     std::fs::read_to_string(log_path(&dir)).map(|s| s.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()).unwrap_or_default()
@@ -88,14 +89,14 @@ fn load() -> Vec<Play> {
 
 /// All logged plays, oldest first.
 pub fn plays() -> Arc<Vec<Play>> {
-    let mut g = PLAYS.lock().unwrap();
+    let mut g = PLAYS.locked();
     g.get_or_insert_with(|| Arc::new(load())).clone()
 }
 
 /// Forget the parsed log (after a restore replaced plays.jsonl).
 pub fn reload() {
-    *PLAYS.lock().unwrap() = None;
-    *SUMMARIES.lock().unwrap() = None;
+    *PLAYS.locked() = None;
+    *SUMMARIES.locked() = None;
 }
 
 /// Only the version that was played (keeps the log small).
@@ -117,7 +118,7 @@ fn append(l: Listen) {
         return;
     }
     let play = Play { t: l.started, secs: (l.secs * 10.0).round() / 10.0, est: false, platform: l.platform, track: slim(&l.track, l.platform) };
-    let Some(dir) = DIR.lock().unwrap().clone() else {
+    let Some(dir) = DIR.locked().clone() else {
         return;
     };
     if let Ok(line) = serde_json::to_string(&play) {
@@ -127,14 +128,14 @@ fn append(l: Listen) {
         }
     }
     crate::scrobble::on_play(&play);
-    if let Some(v) = PLAYS.lock().unwrap().as_mut() {
+    if let Some(v) = PLAYS.locked().as_mut() {
         Arc::make_mut(v).push(play);
     }
 }
 
 /// Called on every engine tick: counts listened time for the current song.
 pub fn on_tick(ps: &PlaybackState) {
-    let mut g = LISTEN.lock().unwrap();
+    let mut g = LISTEN.locked();
     let cur = ps.current.as_ref();
     if g.as_ref().map(|l| l.uid) != cur.map(|c| c.uid) {
         if let Some(old) = g.take() {
@@ -163,7 +164,7 @@ pub fn on_tick(ps: &PlaybackState) {
 
 /// Write the current listen (app exit).
 pub fn flush() {
-    if let Some(l) = LISTEN.lock().unwrap().take() {
+    if let Some(l) = LISTEN.locked().take() {
         append(l);
     }
 }
@@ -241,13 +242,13 @@ const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Au
 pub fn summarize(range: &str, year: Option<i32>) -> Stats {
     let all = plays();
     let key = (format!("{range}|{}", Local::now().date_naive()), year);
-    if let Some((n, s)) = SUMMARIES.lock().unwrap().as_ref().and_then(|m| m.get(&key)) {
+    if let Some((n, s)) = SUMMARIES.locked().as_ref().and_then(|m| m.get(&key)) {
         if *n == all.len() {
             return s.clone();
         }
     }
     let s = summarize_plays(&all, range, year);
-    SUMMARIES.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, (all.len(), s.clone()));
+    SUMMARIES.locked().get_or_insert_with(HashMap::new).insert(key, (all.len(), s.clone()));
     s
 }
 
@@ -446,7 +447,7 @@ mod tests {
             play(now - day, 15.0, "B1", "Beta"), // a skip
             play(now - 1000, 120.0, "B2", "Beta, Gamma"),
         ];
-        *PLAYS.lock().unwrap() = Some(Arc::new(v));
+        *PLAYS.locked() = Some(Arc::new(v));
         let s = summarize("4w", None);
         assert_eq!(s.plays, 3);
         assert_eq!(s.skips, 1);

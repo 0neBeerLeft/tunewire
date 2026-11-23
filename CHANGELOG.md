@@ -3,6 +3,25 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
+## Unreleased
+
+**New: Discover**
+- A Discover page in the sidebar: moods and genres, "Because you listened to…" picks, artists like the ones you play, new albums and singles, and what's trending, with a Surprise me button
+
+**Sound**
+- Fixed songs sometimes sounding distorted and "bass boosted". Songs with a quiet intro were turned up for their whole length; loudness is now measured on the loud part of the song, songs are turned up at most a little, and a smooth limiter replaces the hard clipping
+- Crossfades keep an even volume through the middle, and pause along with the music
+- The equalizer no longer adds low-end noise, and boosting bands leaves enough headroom
+- YouTube songs no longer play in a low-quality format that sounded muffled
+
+**Fixes**
+- Songs no longer glitch or repeat a part when a server ignores seek requests
+- SoundCloud songs ride out short network drops instead of stopping
+- A crash in one background task no longer closes the app
+- Arrow keys and Space work on focused sliders and checkboxes instead of seeking or pausing
+- Pressing → several times quickly skips the full amount
+- Clicking a song while the queue changes plays the song you clicked
+
 ## v2.1.0
 
 **Your library on all your devices**

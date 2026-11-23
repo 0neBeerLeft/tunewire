@@ -17,6 +17,7 @@
 //!   store       settings + library persistence;  secrets  OS keychain
 //!   themes, plugins, discord
 
+use crate::sync_ext::LockExt;
 mod artist;
 mod audio;
 mod backup;
@@ -27,6 +28,7 @@ mod css_guard;
 mod decoder;
 mod discord;
 mod downloads;
+mod dynamics;
 mod eq;
 mod error;
 mod explore;
@@ -55,6 +57,7 @@ mod state;
 mod stats;
 mod store;
 mod stream;
+mod sync_ext;
 mod themes;
 mod ytdlp;
 mod ytdlp_worker;
@@ -204,7 +207,7 @@ pub fn run() {
             system::apply_settings(&app.state::<AppState>(), &settings);
             {
                 let st = app.state::<AppState>();
-                let history = st.store.library.lock().unwrap().history.clone();
+                let history = st.store.library.locked().history.clone();
                 stats::init(&st.store.dir, &history);
                 scrobble::init(&st.store.dir);
                 matcher::init(&st.store.dir);
@@ -338,6 +341,9 @@ pub fn run() {
             commands::browse::ytm_artist,
             commands::browse::ytm_collection,
             commands::browse::ytm_moods,
+            commands::discovery::discover_new_releases,
+            commands::discovery::discover_artists,
+            commands::discovery::discover_because,
             commands::browse::ytm_find_album,
             commands::browse::ytm_mood_page,
             commands::browse::artist_soundcloud,

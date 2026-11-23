@@ -204,15 +204,23 @@ progressEl.addEventListener('keydown', (e) => {
   }
 });
 
+// The last seek asked for: a playback update sent before the backend applied
+// it still carries the old position, so quick repeated ←/→ presses build on
+// this instead (three presses = 15 s, not 5).
+let lastSeek = { pos: 0, at: 0 };
+
 function seekTo(pos) {
+  pos = Math.max(0, pos);
+  lastSeek = { pos, at: Date.now() };
   if (state.playback) state.playback.position = pos;
-  call('seek', { position: Math.max(0, pos) }).catch((e) => toast(errMsg(e), 'error'));
+  call('seek', { position: pos }).catch((e) => toast(errMsg(e), 'error'));
 }
 
 function seekBy(delta) {
   const p = state.playback;
   if (!p || !p.duration || !(p.status === 'playing' || p.status === 'paused')) return;
-  seekTo(Math.min(p.duration - 1, Math.max(0, p.position + delta)));
+  const from = Date.now() - lastSeek.at < 700 ? lastSeek.pos : p.position;
+  seekTo(Math.min(p.duration - 1, Math.max(0, from + delta)));
 }
 
 $('#btn-play').addEventListener('click', () => call('toggle_pause').catch((e) => toast(errMsg(e), 'error')));

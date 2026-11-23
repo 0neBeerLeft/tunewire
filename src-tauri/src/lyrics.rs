@@ -1,6 +1,7 @@
 //! Lyrics from LRCLIB (https://lrclib.net): free, no API key, time-synced
 //! LRC when available. One of the few requests that doesn't go through yt-dlp.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -81,10 +82,17 @@ pub async fn get(artist: String, title: String, album: Option<String>, duration:
     let title = crate::search::strip_noise(&title);
     let artist = artist.split([',', '&']).next().unwrap_or(&artist).trim().to_string();
     let key = format!("{}::{}", crate::search::norm_text(&artist), crate::search::norm_text(&title));
-    if let Some(hit) = cache().lock().unwrap().get(&key) {
+    if let Some(hit) = cache().locked().get(&key) {
         return Ok(hit.clone());
     }
     let res = tauri::async_runtime::spawn_blocking(move || fetch(&artist, &title, album.as_deref(), duration)).await.map_err(|e| AppError::Network(e.to_string()))??;
-    cache().lock().unwrap().insert(key, res.clone());
+    {
+        // Bounded: a long session shouldn't keep every song's lyrics forever.
+        let mut c = cache().locked();
+        if c.len() >= 200 {
+            c.clear();
+        }
+        c.insert(key, res.clone());
+    }
     Ok(res)
 }

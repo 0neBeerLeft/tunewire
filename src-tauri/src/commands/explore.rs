@@ -1,6 +1,7 @@
 //! Charts, followed artists + new releases, search suggestions/history,
 //! lyrics translation, cover colors, Spotify profile import, playlist sync.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashSet;
 use std::sync::Mutex;
 
@@ -87,7 +88,7 @@ pub async fn get_charts(st: State<'_, AppState>, country: Option<String>) -> App
 
 #[tauri::command]
 pub fn list_followed(st: State<'_, AppState>) -> Vec<FollowedArtist> {
-    st.store.library.lock().unwrap().followed.clone()
+    st.store.library.locked().followed.clone()
 }
 
 fn same_name(a: &str, b: &str) -> bool {
@@ -110,7 +111,7 @@ pub fn follow_artist(app: AppHandle, st: State<'_, AppState>, name: String, url:
             Ok(true)
         }
     })?;
-    *FEED.lock().unwrap() = None;
+    *FEED.locked() = None;
     emit_library(&app, "followed");
     Ok(following)
 }
@@ -130,9 +131,9 @@ const PER_ARTIST: usize = 4;
 
 #[tauri::command]
 pub async fn new_releases(app: AppHandle, st: State<'_, AppState>, force: Option<bool>) -> AppResult<Vec<Release>> {
-    let followed = st.store.library.lock().unwrap().followed.clone();
+    let followed = st.store.library.locked().followed.clone();
     if !force.unwrap_or(false) {
-        if let Some((t, feed)) = FEED.lock().unwrap().as_ref() {
+        if let Some((t, feed)) = FEED.locked().as_ref() {
             if t.elapsed().as_secs() < 3 * 3600 {
                 return Ok(mark_new(feed.clone(), &followed));
             }
@@ -156,7 +157,7 @@ pub async fn new_releases(app: AppHandle, st: State<'_, AppState>, force: Option
             }
         }
     }
-    *FEED.lock().unwrap() = Some((std::time::Instant::now(), feed.clone()));
+    *FEED.locked() = Some((std::time::Instant::now(), feed.clone()));
     let feed = mark_new(feed, &followed);
     // First fetch for a newly followed artist: nothing is "new" yet.
     let _ = st.store.update_library(|lib| {
@@ -166,7 +167,7 @@ pub async fn new_releases(app: AppHandle, st: State<'_, AppState>, force: Option
         Ok(())
     });
     emit_library(&app, "followed");
-    Ok(mark_new(feed, &st.store.library.lock().unwrap().followed))
+    Ok(mark_new(feed, &st.store.library.locked().followed))
 }
 
 fn mark_new(mut feed: Vec<Release>, followed: &[FollowedArtist]) -> Vec<Release> {
@@ -178,7 +179,7 @@ fn mark_new(mut feed: Vec<Release>, followed: &[FollowedArtist]) -> Vec<Release>
 
 #[tauri::command]
 pub fn mark_releases_seen(app: AppHandle, st: State<'_, AppState>) -> AppResult<()> {
-    let feed = FEED.lock().unwrap().as_ref().map(|(_, f)| f.clone()).unwrap_or_default();
+    let feed = FEED.locked().as_ref().map(|(_, f)| f.clone()).unwrap_or_default();
     st.store.update_library(|lib| {
         for a in lib.followed.iter_mut() {
             let mut seen: HashSet<String> = a.seen.drain(..).collect();

@@ -294,7 +294,7 @@ const LINK_CODES = {
 /** tunewire://p/<id>, https://…/tunewire/#p=<id>, <share server>/p/<id> → {kind, code}. */
 function parseShareLink(url) {
   const u = String(url).trim();
-  let m = u.match(/^tunewire:\/\/([pcsju])\/([^?#\s/]+)\/?$/) || u.match(/^https:\/\/worldcnc\.github\.io\/tunewire\/?#([pcsju])=([^&\s]+)$/);
+  let m = u.match(/^tunewire:\/\/([pcsju])\/([^?#\s/]+)\/?$/) || u.match(/^https:\/\/(?:0nebeerleft|worldcnc)\.github\.io\/tunewire\/?#([pcsju])=([^&\s]+)$/);
   const base = cloud.cfg?.share_url;
   if (!m && base && u.startsWith(`${base}/`)) m = u.slice(base.length).match(/^\/([pcsju])\/([^?#\s/]+)$/);
   if (!m) return null;

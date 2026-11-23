@@ -4,6 +4,7 @@
 //! Spotify playlist is imported, and the result is saved (matches.json and
 //! the playlist itself), so playing starts like any other song.
 
+use crate::sync_ext::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,22 +37,22 @@ static AGAIN: AtomicBool = AtomicBool::new(false);
 
 pub fn init(dir: &std::path::Path) {
     let path = dir.join("matches.json");
-    *MATCHES.lock().unwrap() = Some(crate::store::load_json(&path));
-    *PATH.lock().unwrap() = Some(path);
+    *MATCHES.locked() = Some(crate::store::load_json(&path));
+    *PATH.locked() = Some(path);
 }
 
 fn save() {
-    let Some(path) = PATH.lock().unwrap().clone() else {
+    let Some(path) = PATH.locked().clone() else {
         return;
     };
-    let data = MATCHES.lock().unwrap().as_ref().and_then(|m| serde_json::to_vec(m).ok());
+    let data = MATCHES.locked().as_ref().and_then(|m| serde_json::to_vec(m).ok());
     if let Some(data) = data {
         let _ = crate::store::write_atomic(&path, &data);
     }
 }
 
 fn entry(id: &str) -> Option<Entry> {
-    MATCHES.lock().unwrap().as_ref().and_then(|m| m.get(id).cloned())
+    MATCHES.locked().as_ref().and_then(|m| m.get(id).cloned())
 }
 
 /// The saved match for a Spotify track id, if any.
@@ -141,7 +142,7 @@ async fn match_cached(sp: &TrackVersion) -> Option<TrackVersion> {
     }
     let found = find(sp).await;
     let Ok(found) = found else { return None }; // network trouble: don't remember
-    if let Some(m) = MATCHES.lock().unwrap().as_mut() {
+    if let Some(m) = MATCHES.locked().as_mut() {
         m.insert(sp.id.clone(), Entry { v: found.clone(), at: now_ms() });
     }
     found
@@ -237,7 +238,7 @@ fn apply_library(app: &AppHandle) {
 pub fn apply_queue(app: &AppHandle) {
     let st = app.state::<AppState>();
     let mut changed = false;
-    for item in st.queue.lock().unwrap().items.iter_mut() {
+    for item in st.queue.locked().items.iter_mut() {
         changed |= apply(&mut item.track);
     }
     if changed {
@@ -249,12 +250,12 @@ pub fn apply_queue(app: &AppHandle) {
 fn prune(app: &AppHandle) {
     let keep: HashSet<String> = {
         let st = app.state::<AppState>();
-        let lib = st.store.library.lock().unwrap();
+        let lib = st.store.library.locked();
         lib.playlists.iter().flat_map(|p| p.tracks.iter()).chain(lib.favorites.iter()).filter_map(spotify_version).map(|v| v.id.clone()).collect()
     };
     let cutoff = now_ms().saturating_sub(60 * 86_400_000);
     let mut removed = false;
-    if let Some(m) = MATCHES.lock().unwrap().as_mut() {
+    if let Some(m) = MATCHES.locked().as_mut() {
         let before = m.len();
         m.retain(|id, e| keep.contains(id) || e.at > cutoff);
         removed = m.len() != before;
@@ -277,7 +278,7 @@ pub fn kick(app: &AppHandle) {
             apply_library(&app);
             let todo: Vec<TrackVersion> = {
                 let st = app.state::<AppState>();
-                let lib = st.store.library.lock().unwrap();
+                let lib = st.store.library.locked();
                 let mut seen = HashSet::new();
                 lib.playlists.iter().flat_map(|p| p.tracks.iter()).chain(lib.favorites.iter()).filter_map(needs_match).filter(|v| seen.insert(v.id.clone())).collect()
             };
@@ -288,7 +289,7 @@ pub fn kick(app: &AppHandle) {
                 let matched = match_all(todo, move |done, matched| {
                     let _ = h.emit("match-progress", Progress { done, total, matched, finished: false, scope: "library" });
                     // Save progress into the library every couple of seconds.
-                    let mut last = last_apply.lock().unwrap();
+                    let mut last = last_apply.locked();
                     if last.elapsed().as_secs_f64() > 2.5 {
                         *last = std::time::Instant::now();
                         drop(last);
@@ -326,7 +327,7 @@ pub fn prepare(app: &AppHandle, tracks: Vec<Track>) {
         let last_apply = Mutex::new(std::time::Instant::now());
         let matched = match_all(todo, move |done, matched| {
             let _ = h.emit("match-progress", Progress { done, total, matched, finished: false, scope: "other" });
-            let mut last = last_apply.lock().unwrap();
+            let mut last = last_apply.locked();
             if last.elapsed().as_secs_f64() > 1.5 {
                 *last = std::time::Instant::now();
                 apply_queue(&h);
@@ -355,7 +356,7 @@ mod tests {
     fn live_match_playlist() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _g = rt.enter();
-        *MATCHES.lock().unwrap() = Some(HashMap::new());
+        *MATCHES.locked() = Some(HashMap::new());
         let mut sps = Vec::new();
         for q in [
             "daft punk one more time",
@@ -394,7 +395,7 @@ mod tests {
     fn live_match_big_playlist() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _g = rt.enter();
-        *MATCHES.lock().unwrap() = Some(HashMap::new());
+        *MATCHES.locked() = Some(HashMap::new());
         let (title, tracks) = crate::spotify::fetch_playlist_full("37i9dQZF1DX4o1oenSJRJd").unwrap();
         let sps: Vec<TrackVersion> = tracks.into_iter().filter_map(|t| t.versions.into_iter().find(|v| v.platform == Platform::Spotify)).collect();
         let n = sps.len();

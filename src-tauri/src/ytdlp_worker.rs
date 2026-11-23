@@ -10,6 +10,7 @@
 //! copy without Python) keep using one process per call; so does every error
 //! path here.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -150,7 +151,7 @@ async fn start(binary: &str) -> Option<Worker> {
     if !ready.contains("\"ready\"") {
         return None;
     }
-    *PENDING.lock().unwrap() = Some(HashMap::new());
+    *PENDING.locked() = Some(HashMap::new());
     tauri::async_runtime::spawn(async move {
         while let Ok(Some(line)) = lines.next_line().await {
             let Ok(v) = serde_json::from_str::<Value>(&line) else {
@@ -159,7 +160,7 @@ async fn start(binary: &str) -> Option<Worker> {
             let Some(id) = v.get("id").and_then(Value::as_u64) else {
                 continue;
             };
-            let tx = PENDING.lock().unwrap().as_mut().and_then(|p| p.remove(&id));
+            let tx = PENDING.locked().as_mut().and_then(|p| p.remove(&id));
             if let Some(tx) = tx {
                 let r = match (v.get("ok"), v.get("err").and_then(Value::as_str)) {
                     (Some(ok), _) => Ok(ok.clone()),
@@ -170,7 +171,7 @@ async fn start(binary: &str) -> Option<Worker> {
             }
         }
         // Worker exited: fail whatever is still waiting (callers fall back).
-        if let Some(p) = PENDING.lock().unwrap().take() {
+        if let Some(p) = PENDING.locked().take() {
             for (_, tx) in p {
                 let _ = tx.send(Err("__worker_gone__".into()));
             }
@@ -221,7 +222,7 @@ pub async fn extract(binary: &str, url: &str, opts: Value) -> AppResult<Option<V
                 }
             }
         }
-        let registered = PENDING.lock().unwrap().as_mut().map(|p| p.insert(id, tx)).is_some();
+        let registered = PENDING.locked().as_mut().map(|p| p.insert(id, tx)).is_some();
         if !registered {
             // The worker exited while someone held this lock, so its reader
             // couldn't clear the slot: drop it, and the next call starts a new one.
@@ -237,7 +238,7 @@ pub async fn extract(binary: &str, url: &str, opts: Value) -> AppResult<Option<V
     }
     match tokio::time::timeout(Duration::from_secs(60), rx).await {
         Err(_) => {
-            if let Some(p) = PENDING.lock().unwrap().as_mut() {
+            if let Some(p) = PENDING.locked().as_mut() {
                 p.remove(&id);
             }
             Err(AppError::Timeout("yt-dlp took too long to respond".into()))

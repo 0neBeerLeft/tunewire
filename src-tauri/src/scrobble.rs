@@ -9,6 +9,7 @@
 //! ListenBrainz user token. The Last.fm API key/secret are built in
 //! (TUNEWIRE_LASTFM_KEY / TUNEWIRE_LASTFM_SECRET) or the user's own.
 
+use crate::sync_ext::LockExt;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -56,7 +57,7 @@ pub struct Scrobble {
 }
 
 pub fn init(dir: &std::path::Path) {
-    *DIR.lock().unwrap() = Some(dir.to_path_buf());
+    *DIR.locked() = Some(dir.to_path_buf());
     // Anything left from last time.
     std::thread::spawn(|| {
         std::thread::sleep(Duration::from_secs(10));
@@ -65,11 +66,11 @@ pub fn init(dir: &std::path::Path) {
 }
 
 pub fn configure(lastfm: bool, listenbrainz: bool, lastfm_key: &str) {
-    *CONFIG.lock().unwrap() = Some(Config { lastfm, listenbrainz, lastfm_key: lastfm_key.trim().to_string() });
+    *CONFIG.locked() = Some(Config { lastfm, listenbrainz, lastfm_key: lastfm_key.trim().to_string() });
 }
 
 fn config() -> Config {
-    CONFIG.lock().unwrap().clone().unwrap_or_default()
+    CONFIG.locked().clone().unwrap_or_default()
 }
 
 /// API key + secret: the user's own pair, else the one built in.
@@ -263,7 +264,7 @@ pub fn on_play(play: &Play) {
         return;
     }
     {
-        let _g = QUEUE_LOCK.lock().unwrap();
+        let _g = QUEUE_LOCK.locked();
         let mut q = load_queue();
         q.extend(new);
         save_queue(&q);
@@ -300,7 +301,7 @@ pub fn now_playing(track: &Track) {
 }
 
 fn queue_path() -> Option<PathBuf> {
-    DIR.lock().unwrap().as_ref().map(|d| d.join("scrobbles.json"))
+    DIR.locked().as_ref().map(|d| d.join("scrobbles.json"))
 }
 
 fn load_queue() -> Vec<Scrobble> {
@@ -319,7 +320,7 @@ pub fn flush_queue() {
     static FLUSHING: Mutex<()> = Mutex::new(());
     let Ok(_f) = FLUSHING.try_lock() else { return };
     let q = {
-        let _g = QUEUE_LOCK.lock().unwrap();
+        let _g = QUEUE_LOCK.locked();
         load_queue()
     };
     if q.is_empty() {
@@ -339,7 +340,7 @@ pub fn flush_queue() {
             Err(_) => {}
         }
     }
-    let _g = QUEUE_LOCK.lock().unwrap();
+    let _g = QUEUE_LOCK.locked();
     let rest: Vec<Scrobble> = load_queue().into_iter().filter(|s| !sent.contains(s)).collect();
     save_queue(&rest);
 }

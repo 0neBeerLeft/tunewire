@@ -12,7 +12,7 @@ grep -q "^## v$v\$" CHANGELOG.md || { echo "add a '## v$v' section to CHANGELOG.
 sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$v\"/" src-tauri/tauri.conf.json
 sed -i "0,/^version = \"[^\"]*\"/s//version = \"$v\"/" src-tauri/Cargo.toml
 (cd src-tauri && cargo update -p tunewire --offline -q && cargo test -q)
-git -c user.name="WorldCNC" commit -qa -m "Release v$v" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -c user.name="0neBeerLeft" commit -qa -m "Release v$v" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git tag "v$v"
 git push -q && git push -q origin "v$v"
-echo "Released v$v: https://github.com/WorldCNC/tunewire/actions"
+echo "Released v$v: https://github.com/0neBeerLeft/tunewire/actions"

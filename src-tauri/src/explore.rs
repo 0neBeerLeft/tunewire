@@ -1,6 +1,7 @@
 //! Discovery helpers that aren't search: suggestions, charts, lyrics
 //! translation and cover colors. All keyless public endpoints.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -208,7 +209,7 @@ pub fn parse_charts(country: &str, v: &Value) -> Charts {
 
 pub async fn charts(country: String) -> AppResult<Charts> {
     let country = if CHART_COUNTRIES.iter().any(|(c, _)| *c == country) { country } else { "ZZ".into() };
-    if let Some((t, c)) = CHARTS_CACHE.lock().unwrap().as_ref().and_then(|m| m.get(&country).cloned()) {
+    if let Some((t, c)) = CHARTS_CACHE.locked().as_ref().and_then(|m| m.get(&country).cloned()) {
         if t.elapsed().as_secs() < 3600 {
             return Ok(c);
         }
@@ -238,7 +239,7 @@ pub async fn charts(country: String) -> AppResult<Charts> {
     if charts.playlists.is_empty() && charts.artists.is_empty() {
         return Err(AppError::Extraction("YouTube Music charts page format changed".into()));
     }
-    CHARTS_CACHE.lock().unwrap().get_or_insert_with(Default::default).insert(country, (std::time::Instant::now(), charts.clone()));
+    CHARTS_CACHE.locked().get_or_insert_with(Default::default).insert(country, (std::time::Instant::now(), charts.clone()));
     Ok(charts)
 }
 
@@ -346,7 +347,7 @@ pub async fn cover_wash(url: String) -> AppResult<Option<String>> {
     if !url.starts_with("https://") {
         return Ok(None);
     }
-    if let Some(hit) = WASH_CACHE.lock().unwrap().as_ref().and_then(|m| m.get(&url).cloned()) {
+    if let Some(hit) = WASH_CACHE.locked().as_ref().and_then(|m| m.get(&url).cloned()) {
         return Ok(hit);
     }
     let u = url.clone();
@@ -359,7 +360,7 @@ pub async fn cover_wash(url: String) -> AppResult<Option<String>> {
         Ok(wash(&bytes))
     })
     .await?;
-    let mut cache = WASH_CACHE.lock().unwrap();
+    let mut cache = WASH_CACHE.locked();
     let m = cache.get_or_insert_with(Default::default);
     if m.len() > 60 {
         m.clear();
@@ -372,7 +373,7 @@ pub async fn cover_color(url: String) -> AppResult<Option<String>> {
     if !url.starts_with("https://") {
         return Ok(None);
     }
-    if let Some(hit) = COLOR_CACHE.lock().unwrap().as_ref().and_then(|m| m.get(&url).cloned()) {
+    if let Some(hit) = COLOR_CACHE.locked().as_ref().and_then(|m| m.get(&url).cloned()) {
         return Ok(hit);
     }
     let u = url.clone();
@@ -385,7 +386,7 @@ pub async fn cover_color(url: String) -> AppResult<Option<String>> {
         Ok(dominant_color(&bytes))
     })
     .await?;
-    let mut cache = COLOR_CACHE.lock().unwrap();
+    let mut cache = COLOR_CACHE.locked();
     let m = cache.get_or_insert_with(Default::default);
     if m.len() > 500 {
         m.clear();

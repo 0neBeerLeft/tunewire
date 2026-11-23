@@ -6,6 +6,7 @@
 //! saves the current state as a backup in <data>/backups, so a restore can
 //! itself be undone.
 
+use crate::sync_ext::LockExt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -56,7 +57,7 @@ pub struct BackupSummary {
 const MACHINE_SETTINGS: [&str; 7] = ["local_folders", "downloads_dir", "output_device", "ytdlp_source", "supabase_url", "supabase_anon_key", "background_image"];
 
 pub fn build(store: &Store, themes: &ThemeStore) -> Backup {
-    let lib = store.library.lock().unwrap();
+    let lib = store.library.locked();
     let mut settings = serde_json::to_value(store.settings()).unwrap_or(Value::Null);
     if let Some(o) = settings.as_object_mut() {
         o.remove("spotify_client_secret");
@@ -232,7 +233,7 @@ mod tests {
         std::fs::write(store.dir.join("plays.jsonl"), "").unwrap();
         restore(&store, &themes, &file).unwrap();
 
-        let lib = store.library.lock().unwrap();
+        let lib = store.library.locked();
         assert_eq!(lib.playlists.len(), 1);
         assert_eq!(lib.playlists[0].tracks.len(), 2);
         assert_eq!(lib.favorites.len(), 1);

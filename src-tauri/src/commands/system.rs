@@ -1,3 +1,4 @@
+use crate::sync_ext::LockExt;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, State};
@@ -89,13 +90,13 @@ pub fn update_settings(app: AppHandle, st: State<'_, AppState>, patch: Value) ->
     let new: Settings = serde_json::from_value(Value::Object(merged))?;
     let s = st.store.update_settings(|s| *s = new)?;
     // Switching output stops the engine; continue the song on the new device.
-    let resume = (s.output_device != old_device && st.now.lock().unwrap().phase == crate::state::Phase::Active)
-        .then(|| (st.audio.status().position, st.queue.lock().unwrap().current))
+    let resume = (s.output_device != old_device && st.now.locked().phase == crate::state::Phase::Active)
+        .then(|| (st.audio.status().position, st.queue.locked().current))
         .and_then(|(pos, i)| i.map(|i| (pos, i)));
     apply_settings(&st, &s);
     if let Some((pos, i)) = resume {
-        let uid = st.queue.lock().unwrap().items.get(i).map(|x| x.uid).unwrap_or(0);
-        *st.resume_position.lock().unwrap() = Some((uid, pos));
+        let uid = st.queue.locked().items.get(i).map(|x| x.uid).unwrap_or(0);
+        *st.resume_position.locked() = Some((uid, pos));
         crate::controller::spawn_play(&app, i, false);
     }
     Ok(s)

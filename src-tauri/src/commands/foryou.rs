@@ -1,5 +1,6 @@
 //! Home ("For you") mixes, listening stats and Wrapped.
 
+use crate::sync_ext::LockExt;
 use base64::Engine;
 use tauri::{AppHandle, Manager, State};
 
@@ -10,7 +11,7 @@ use crate::state::AppState;
 use crate::stats::{self, Stats};
 
 fn taste_sources(st: &AppState) -> (Vec<Track>, Vec<Track>) {
-    let lib = st.store.library.lock().unwrap();
+    let lib = st.store.library.locked();
     let playlists = lib.playlists.iter().flat_map(|p| p.tracks.iter().cloned()).take(3000).collect();
     (lib.favorites.clone(), playlists)
 }

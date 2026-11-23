@@ -1728,3 +1728,15 @@ body.dragging-tracks .track:hover { background: transparent; }
 .btn.si-discord { height: 38px; padding: 0 18px; margin-top: 8px; border-radius: 19px; background: #5865f2; border-color: #5865f2; color: #fff; }
 .btn.si-discord .plogo, .btn.si-discord svg.i { width: 18px; height: 18px; }
 .signin-modal footer { align-items: center; }
+
+/* Discover ----------------------------------------------------------------- */
+.disc-moods { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.disc-mood { padding: 8px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 700; color: #fff; background: var(--c, var(--bg-elev-2)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); transition: transform .15s var(--ease-out), filter .15s; animation: tw-rise .3s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 16) * 18ms); }
+.disc-mood:hover { transform: translateY(-1px); filter: brightness(1.12); }
+.disc-mood.more { background: var(--bg-elev-2); color: var(--text); }
+.disc-because { font-weight: 800; }
+.disc-because b { color: var(--accent); font-weight: 800; }
+.disc-hint { display: flex; gap: 12px; align-items: center; padding: 14px 16px; margin-top: 22px; border-radius: 10px; background: var(--bg-elev-2); color: var(--text-dim); }
+.disc-hint svg.i { width: 22px; height: 22px; color: var(--accent); flex: none; }
+.disc-error { display: flex; gap: 12px; align-items: center; padding: 10px 0; }
+.card-row.disc-two-lines { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; overflow: hidden; row-gap: 0; }

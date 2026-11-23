@@ -1,3 +1,4 @@
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 
 use tauri::{AppHandle, State};
@@ -19,7 +20,7 @@ fn clean_tracks(tracks: Vec<Track>) -> Vec<Track> {
 
 #[tauri::command(async)]
 pub fn list_playlists(st: State<'_, AppState>) -> Vec<Playlist> {
-    st.store.library.lock().unwrap().playlists.clone()
+    st.store.library.locked().playlists.clone()
 }
 
 #[tauri::command(async)]
@@ -273,7 +274,7 @@ pub fn move_in_playlist(app: AppHandle, st: State<'_, AppState>, id: String, fro
 
 #[tauri::command(async)]
 pub fn list_favorites(st: State<'_, AppState>) -> Vec<Track> {
-    st.store.library.lock().unwrap().favorites.clone()
+    st.store.library.locked().favorites.clone()
 }
 
 /// Liked Songs from another device (sync), if they're still `expect` here.
@@ -333,7 +334,7 @@ pub fn toggle_favorite(app: AppHandle, st: State<'_, AppState>, track: Track) ->
 
 #[tauri::command(async)]
 pub fn list_history(st: State<'_, AppState>, limit: Option<usize>) -> Vec<HistoryEntry> {
-    let lib = st.store.library.lock().unwrap();
+    let lib = st.store.library.locked();
     lib.history.iter().take(limit.unwrap_or(store::HISTORY_MAX)).cloned().collect()
 }
 

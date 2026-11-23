@@ -31,19 +31,19 @@ impl EqParams {
 
 #[derive(Clone, Copy)]
 struct Coeffs {
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    a1: f32,
-    a2: f32,
+    b0: f64,
+    b1: f64,
+    b2: f64,
+    a1: f64,
+    a2: f64,
 }
 
 #[derive(Clone, Copy, Default)]
 struct State {
-    x1: f32,
-    x2: f32,
-    y1: f32,
-    y2: f32,
+    x1: f64,
+    x2: f64,
+    y1: f64,
+    y2: f64,
 }
 
 enum Kind {
@@ -52,9 +52,12 @@ enum Kind {
     HighShelf,
 }
 
+/// Designed and run in f64: at 31-62 Hz the poles sit very close to the unit
+/// circle, where f32 coefficients and state add audible low-frequency noise.
 fn design(kind: Kind, freq: f32, gain_db: f32, rate: u32) -> Coeffs {
-    let a = 10f32.powf(gain_db / 40.0);
-    let w0 = std::f32::consts::TAU * freq / rate as f32;
+    let (freq, gain_db) = (freq as f64, gain_db as f64);
+    let a = 10f64.powf(gain_db / 40.0);
+    let w0 = std::f64::consts::TAU * freq / rate as f64;
     let (sin, cos) = w0.sin_cos();
     let (b0, b1, b2, a0, a1, a2) = match kind {
         Kind::Peak => {
@@ -63,7 +66,7 @@ fn design(kind: Kind, freq: f32, gain_db: f32, rate: u32) -> Coeffs {
         }
         Kind::LowShelf | Kind::HighShelf => {
             // Shelf slope S = 1.
-            let alpha = sin / 2.0 * std::f32::consts::SQRT_2;
+            let alpha = sin / 2.0 * std::f64::consts::SQRT_2;
             let k = 2.0 * a.sqrt() * alpha;
             if matches!(kind, Kind::LowShelf) {
                 (
@@ -131,8 +134,9 @@ impl Equalizer {
             }
         }
         self.state = vec![State::default(); self.filters.len() * self.channels];
-        // Leave headroom for boosts so they don't just hit the limiter.
-        self.preamp = 10f32.powf(-max_boost * 0.6 / 20.0);
+        // Full headroom for boosts: a bass-heavy preset would otherwise push
+        // the loud parts into the limiter and make it pump.
+        self.preamp = 10f32.powf(-max_boost / 20.0);
     }
 
     pub fn active(&self) -> bool {
@@ -144,7 +148,7 @@ impl Equalizer {
         if self.filters.is_empty() {
             return x;
         }
-        let mut y = x * self.preamp;
+        let mut y = (x * self.preamp) as f64;
         let n = self.filters.len();
         let base = (ch % self.channels) * n;
         for (i, c) in self.filters.iter().enumerate() {
@@ -156,7 +160,7 @@ impl Equalizer {
             s.y1 = out;
             y = out;
         }
-        y
+        y as f32
     }
 }
 

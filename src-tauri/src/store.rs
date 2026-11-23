@@ -9,6 +9,7 @@
 //! one (a burst of edits is one write, and no command waits for the disk);
 //! `Store::flush` writes what's pending right away (exit, restart).
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -312,7 +313,7 @@ const SAVE_RETRY: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl Writer {
     fn mark(&self, file: u8) {
-        *self.dirty.lock().unwrap() |= file;
+        *self.dirty.locked() |= file;
         self.wake.notify_one();
     }
 
@@ -320,7 +321,7 @@ impl Writer {
     /// Files that failed stay marked; returns whether any did.
     fn write_pending(&self, dir: &Path, library: &Mutex<Library>) -> bool {
         let _io = self.io.lock().unwrap_or_else(|e| e.into_inner());
-        let files = std::mem::take(&mut *self.dirty.lock().unwrap());
+        let files = std::mem::take(&mut *self.dirty.locked());
         let failed = std::cell::Cell::new(0u8);
         let save = |bit: u8, name: &str, data: serde_json::Result<Vec<u8>>, snapshot: bool| {
             let path = dir.join(name);
@@ -340,22 +341,22 @@ impl Writer {
                 followed: &'a [FollowedArtist],
             }
             let data = {
-                let lib = library.lock().unwrap();
+                let lib = library.locked();
                 serde_json::to_vec(&Main { playlists: &lib.playlists, favorites: &lib.favorites, followed: &lib.followed })
             };
             save(LIBRARY_FILE, "library.json", data, true);
         }
         if files & HISTORY_FILE != 0 {
-            let data = serde_json::to_vec(&library.lock().unwrap().history);
+            let data = serde_json::to_vec(&library.locked().history);
             save(HISTORY_FILE, "history.json", data, false);
         }
         if files & DOWNLOADS_FILE != 0 {
-            let data = serde_json::to_vec(&library.lock().unwrap().downloads);
+            let data = serde_json::to_vec(&library.locked().downloads);
             save(DOWNLOADS_FILE, "downloads.json", data, false);
         }
         let failed = failed.get();
         if failed != 0 {
-            *self.dirty.lock().unwrap() |= failed;
+            *self.dirty.locked() |= failed;
         }
         failed != 0
     }
@@ -364,9 +365,9 @@ impl Writer {
         let w = self.clone();
         let _ = std::thread::Builder::new().name("store-writer".into()).spawn(move || loop {
             {
-                let mut d = w.dirty.lock().unwrap();
+                let mut d = w.dirty.locked();
                 while *d == 0 {
-                    d = w.wake.wait(d).unwrap();
+                    d = w.wake.wait(d).unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
             }
             // Let a burst of changes settle into one write.
@@ -515,7 +516,7 @@ impl Store {
 
     pub fn save_settings(&self) -> AppResult<()> {
         let _w = SAVE_SETTINGS.lock().unwrap_or_else(|e| e.into_inner());
-        let data = serde_json::to_vec_pretty(&*self.settings.lock().unwrap())?;
+        let data = serde_json::to_vec_pretty(&*self.settings.locked())?;
         write_atomic(&self.dir.join("settings.json"), &data)
     }
 
@@ -525,31 +526,31 @@ impl Store {
     }
 
     pub fn update_history<T>(&self, f: impl FnOnce(&mut Vec<HistoryEntry>) -> AppResult<T>) -> AppResult<T> {
-        let r = f(&mut self.library.lock().unwrap().history)?;
+        let r = f(&mut self.library.locked().history)?;
         self.writer.mark(HISTORY_FILE);
         Ok(r)
     }
 
     pub fn update_downloads<T>(&self, f: impl FnOnce(&mut Vec<crate::downloads::Download>) -> AppResult<T>) -> AppResult<T> {
-        let r = f(&mut self.library.lock().unwrap().downloads)?;
+        let r = f(&mut self.library.locked().downloads)?;
         self.writer.mark(DOWNLOADS_FILE);
         Ok(r)
     }
 
     pub fn settings(&self) -> Settings {
-        self.settings.lock().unwrap().clone()
+        self.settings.locked().clone()
     }
 
     /// Change settings in memory only (call `save_settings` later).
     pub fn update_settings_nosave(&self, f: impl FnOnce(&mut Settings)) {
-        let mut s = self.settings.lock().unwrap();
+        let mut s = self.settings.locked();
         f(&mut s);
         s.normalize();
     }
 
     pub fn update_settings(&self, f: impl FnOnce(&mut Settings)) -> AppResult<Settings> {
         let s = {
-            let mut s = self.settings.lock().unwrap();
+            let mut s = self.settings.locked();
             f(&mut s);
             s.normalize();
             s.clone()
@@ -559,14 +560,14 @@ impl Store {
     }
 
     pub fn update_library<T>(&self, f: impl FnOnce(&mut Library) -> AppResult<T>) -> AppResult<T> {
-        let r = f(&mut self.library.lock().unwrap())?;
+        let r = f(&mut self.library.locked())?;
         self.save_library();
         Ok(r)
     }
 
     /// Like `update_library`, but only writes when `f` says it changed something.
     pub fn update_library_if<T>(&self, f: impl FnOnce(&mut Library) -> AppResult<(T, bool)>) -> AppResult<(T, bool)> {
-        let (r, changed) = f(&mut self.library.lock().unwrap())?;
+        let (r, changed) = f(&mut self.library.locked())?;
         if changed {
             self.save_library();
         }

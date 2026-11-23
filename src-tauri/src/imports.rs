@@ -7,6 +7,7 @@
 //!
 //! Songs without a Spotify id are matched to YouTube Music right away.
 
+use crate::sync_ext::LockExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -47,7 +48,7 @@ pub struct SpotifyLibrary {
 }
 
 fn token() -> AppResult<String> {
-    TOKEN.lock().unwrap().as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(50 * 60)).map(|(t, _)| t.clone()).ok_or_else(|| AppError::Unavailable("log in to Spotify first".into()))
+    TOKEN.locked().as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(50 * 60)).map(|(t, _)| t.clone()).ok_or_else(|| AppError::Unavailable("log in to Spotify first".into()))
 }
 
 fn api_blocking(token: &str, url: &str) -> AppResult<Value> {
@@ -70,7 +71,7 @@ fn api_blocking(token: &str, url: &str) -> AppResult<Value> {
             }
             429 => return Err(AppError::Network("Spotify is rate limiting; try again in a minute".into())),
             401 => {
-                *TOKEN.lock().unwrap() = None;
+                *TOKEN.locked() = None;
                 return Err(AppError::Unavailable("the Spotify login expired; log in again".into()));
             }
             403 => return Err(AppError::Extraction(format!("Spotify refused {path}{}", if reason.is_empty() { String::new() } else { format!(": {reason}") }))),
@@ -163,7 +164,7 @@ pub async fn spotify_login(app: &AppHandle) -> AppResult<SpotifyLibrary> {
         let tok = crate::spotify_play::oauth(&["streaming", "user-library-read", "playlist-read-private", "playlist-read-collaborative"])
             .await
             .inspect_err(|e| steps.step(&format!("Sign-in failed: {e}")))?;
-        *TOKEN.lock().unwrap() = Some((tok, std::time::Instant::now()));
+        *TOKEN.locked() = Some((tok, std::time::Instant::now()));
         steps.step("Signed in. Reading your library…");
     }
     match tokio::time::timeout(Duration::from_secs(90), list_library(&steps)).await {

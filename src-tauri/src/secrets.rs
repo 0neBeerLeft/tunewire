@@ -41,6 +41,8 @@ pub mod fake {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
 
+    use crate::sync_ext::LockExt;
+
     static STORE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
     pub static BROKEN: AtomicBool = AtomicBool::new(false);
 
@@ -48,14 +50,14 @@ pub mod fake {
         if BROKEN.load(Ordering::SeqCst) {
             return None;
         }
-        STORE.lock().unwrap().as_ref()?.get(name).cloned().filter(|s| !s.is_empty())
+        STORE.locked().as_ref()?.get(name).cloned().filter(|s| !s.is_empty())
     }
 
     pub fn set(name: &str, value: &str) -> crate::error::AppResult<()> {
         if BROKEN.load(Ordering::SeqCst) {
             return Err(crate::error::AppError::Storage("keychain locked".into()));
         }
-        STORE.lock().unwrap().get_or_insert_with(HashMap::new).insert(name.into(), value.into());
+        STORE.locked().get_or_insert_with(HashMap::new).insert(name.into(), value.into());
         Ok(())
     }
 }

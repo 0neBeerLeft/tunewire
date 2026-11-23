@@ -1,3 +1,4 @@
+use crate::sync_ext::LockExt;
 use std::path::Path;
 
 use serde::Serialize;
@@ -24,7 +25,7 @@ struct DownloadEvent<'a> {
 pub fn download_tracks(app: AppHandle, st: State<'_, AppState>, tracks: Vec<Track>) -> usize {
     let dir = st.downloads_dir();
     let pending: Vec<Track> = {
-        let lib = st.store.library.lock().unwrap();
+        let lib = st.store.library.locked();
         tracks.into_iter().filter(|t| downloads::find(&lib.downloads, t).is_none()).collect()
     };
     let n = pending.len();
@@ -74,7 +75,7 @@ pub fn download_tracks(app: AppHandle, st: State<'_, AppState>, tracks: Vec<Trac
 
 #[tauri::command]
 pub fn list_downloads(st: State<'_, AppState>) -> Vec<Download> {
-    st.store.library.lock().unwrap().downloads.iter().filter(|d| Path::new(&d.path).exists()).cloned().collect()
+    st.store.library.locked().downloads.iter().filter(|d| Path::new(&d.path).exists()).cloned().collect()
 }
 
 #[tauri::command]

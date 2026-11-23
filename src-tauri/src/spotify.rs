@@ -8,6 +8,7 @@
 //! fetches something without yt-dlp. It is metadata only and can be turned off
 //! in Settings ("Spotify metadata bridge").
 
+use crate::sync_ext::LockExt;
 use serde_json::Value;
 
 use crate::error::{AppError, AppResult};
@@ -170,7 +171,7 @@ pub fn warm() {
     static RENEWING: std::sync::Once = std::sync::Once::new();
     RENEWING.call_once(|| {
         let _ = std::thread::Builder::new().name("spotify-token".into()).spawn(|| loop {
-            let exp = TOKEN.lock().unwrap().as_ref().map(|(_, exp)| *exp);
+            let exp = TOKEN.locked().as_ref().map(|(_, exp)| *exp);
             let wait = match exp {
                 Some(exp) => exp.saturating_sub(now_ms() + 5 * 60_000).max(60_000),
                 None => 5 * 60_000, // failed (offline?): try again later
@@ -183,7 +184,7 @@ pub fn warm() {
 
 fn token(force: bool) -> AppResult<String> {
     if !force {
-        if let Some((t, exp)) = TOKEN.lock().unwrap().as_ref() {
+        if let Some((t, exp)) = TOKEN.locked().as_ref() {
             if *exp > now_ms() + 60_000 {
                 return Ok(t.clone());
             }
@@ -197,7 +198,7 @@ fn token(force: bool) -> AppResult<String> {
     let session = data.pointer("/props/pageProps/state/settings/session").ok_or_else(|| AppError::Extraction("no Spotify session token".into()))?;
     let tok = session.get("accessToken").and_then(Value::as_str).ok_or_else(|| AppError::Extraction("no Spotify session token".into()))?.to_string();
     let exp = session.get("accessTokenExpirationTimestampMs").and_then(Value::as_u64).unwrap_or(now_ms() + 30 * 60_000);
-    *TOKEN.lock().unwrap() = Some((tok.clone(), exp));
+    *TOKEN.locked() = Some((tok.clone(), exp));
     Ok(tok)
 }
 
@@ -230,12 +231,12 @@ fn discover_search_hash() -> AppResult<String> {
 
 fn search_hash(refresh: bool) -> String {
     if !refresh {
-        if let Some(h) = SEARCH_HASH.lock().unwrap().clone() {
+        if let Some(h) = SEARCH_HASH.locked().clone() {
             return h;
         }
     }
     let h = if refresh { discover_search_hash().unwrap_or_else(|_| SEARCH_HASH_FALLBACK.into()) } else { SEARCH_HASH_FALLBACK.into() };
-    *SEARCH_HASH.lock().unwrap() = Some(h.clone());
+    *SEARCH_HASH.locked() = Some(h.clone());
     h
 }
 
@@ -357,6 +358,16 @@ mod live_search_tests {
 
 static ISRC_CACHE: Mutex<Option<std::collections::HashMap<String, Option<String>>>> = Mutex::new(None);
 
+/// Remember a track's ISRC (bounded: cleared when it gets large).
+fn isrc_cache_put(id: String, isrc: Option<String>) {
+    let mut g = ISRC_CACHE.locked();
+    let m = g.get_or_insert_with(Default::default);
+    if m.len() >= 2000 {
+        m.clear();
+    }
+    m.insert(id, isrc);
+}
+
 /// Base62 track id → 32-hex "gid" used by the metadata endpoint.
 fn gid(id: &str) -> Option<String> {
     const ALPHABET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -404,18 +415,18 @@ fn isrc_blocking(id: &str) -> AppResult<Option<String>> {
 pub fn remember_isrc(track_id: &str, isrc: &str) {
     let isrc = isrc.trim().to_ascii_uppercase();
     if isrc.len() == 12 && isrc.chars().all(|c| c.is_ascii_alphanumeric()) {
-        ISRC_CACHE.lock().unwrap().get_or_insert_with(Default::default).insert(track_id.to_string(), Some(isrc));
+        isrc_cache_put(track_id.to_string(), Some(isrc));
     }
 }
 
 /// ISRC of a Spotify track (cached; `None` when Spotify lists none).
 pub async fn isrc(track_id: &str) -> AppResult<Option<String>> {
-    if let Some(hit) = ISRC_CACHE.lock().unwrap().as_ref().and_then(|m| m.get(track_id).cloned()) {
+    if let Some(hit) = ISRC_CACHE.locked().as_ref().and_then(|m| m.get(track_id).cloned()) {
         return Ok(hit);
     }
     let id = track_id.to_string();
     let found = tauri::async_runtime::spawn_blocking(move || isrc_blocking(&id)).await.map_err(|e| AppError::Network(e.to_string()))??;
-    ISRC_CACHE.lock().unwrap().get_or_insert_with(Default::default).insert(track_id.to_string(), found.clone());
+    isrc_cache_put(track_id.to_string(), found.clone());
     Ok(found)
 }
 
@@ -501,7 +512,7 @@ pub(crate) fn fetch_playlist_full(id: &str) -> AppResult<(String, Vec<Track>)> {
         return Err(AppError::Invalid("malformed Spotify id".into()));
     }
     let mut tok = token(false)?;
-    let mut hash = PLAYLIST_HASH.lock().unwrap().clone().unwrap_or_else(|| FETCH_PLAYLIST_FALLBACK.into());
+    let mut hash = PLAYLIST_HASH.locked().clone().unwrap_or_else(|| FETCH_PLAYLIST_FALLBACK.into());
     let mut title = String::from("Spotify playlist");
     let mut tracks = Vec::new();
     let mut offset = 0usize;
@@ -518,7 +529,7 @@ pub(crate) fn fetch_playlist_full(id: &str) -> AppResult<(String, Vec<Track>)> {
             }
             _ if (unknown || status == 400 || status == 404) && !retried => {
                 hash = discover_op_hash("fetchPlaylist")?;
-                *PLAYLIST_HASH.lock().unwrap() = Some(hash.clone());
+                *PLAYLIST_HASH.locked() = Some(hash.clone());
                 retried = true;
                 continue;
             }

@@ -1,6 +1,7 @@
 //! Multi-source search: normalization, fuzzy matching, per-platform
 //! deduplication, cross-platform grouping, ranking and a short-lived cache.
 
+use crate::sync_ext::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -633,12 +634,12 @@ pub struct SearchCache {
 
 impl SearchCache {
     fn get(&self, key: &str) -> Option<Vec<TrackVersion>> {
-        let map = self.map.lock().unwrap();
+        let map = self.map.locked();
         map.get(key).filter(|(t, _)| t.elapsed() < CACHE_TTL).map(|(_, v)| v.clone())
     }
 
     fn put(&self, key: String, v: Vec<TrackVersion>) {
-        let mut map = self.map.lock().unwrap();
+        let mut map = self.map.locked();
         map.retain(|_, (t, _)| t.elapsed() < CACHE_TTL);
         if map.len() >= CACHE_MAX {
             if let Some(oldest) = map.iter().min_by_key(|(_, (t, _))| *t).map(|(k, _)| k.clone()) {
@@ -898,7 +899,7 @@ pub fn needs_completion(tracks: &[Track]) -> Vec<String> {
 
 /// Patch cached search results with completed metadata.
 pub fn apply_metadata(cache: &SearchCache, metas: &[crate::ytdlp::Meta]) {
-    let mut map = cache.map.lock().unwrap();
+    let mut map = cache.map.locked();
     for (_, versions) in map.values_mut() {
         for v in versions.iter_mut() {
             if let Some(m) = metas.iter().find(|m| m.url == v.url) {

@@ -23,7 +23,7 @@ thread_local! {
 pub fn init(app: &tauri::App) {
     #[cfg(target_os = "windows")]
     let hwnd = match app.get_webview_window("main").and_then(|w| w.hwnd().ok()) {
-        Some(h) => Some(h.0 as *mut std::ffi::c_void),
+        Some(h) => Some::<*mut std::ffi::c_void>(h.0),
         None => return,
     };
     #[cfg(not(target_os = "windows"))]

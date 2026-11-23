@@ -2,6 +2,7 @@
 //! file, download, or yt-dlp with platform fallback), starting it, preloading
 //! the next one for gapless playback, and reacting to engine events.
 
+use crate::sync_ext::LockExt;
 use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -20,7 +21,7 @@ async fn load_version(st: &AppState, v: &TrackVersion, token: u64) -> AppResult<
     let local_path = if v.platform == Platform::Local {
         Some(std::path::PathBuf::from(&v.url))
     } else {
-        let lib = st.store.library.lock().unwrap();
+        let lib = st.store.library.locked();
         lib.downloads.iter().find(|d| d.version.url == v.url && std::path::Path::new(&d.path).exists()).map(|d| d.path.clone().into())
     };
     if let Some(path) = local_path {
@@ -93,7 +94,7 @@ fn candidates(st: &AppState, item: &QueueItem) -> Vec<TrackVersion> {
             c.insert(0, v);
         }
     }
-    let lib = st.store.library.lock().unwrap();
+    let lib = st.store.library.locked();
     if let Some(d) = downloads::find(&lib.downloads, &item.track) {
         c.retain(|v| v.url != d.version.url);
         c.insert(0, d.version.clone());
@@ -141,7 +142,7 @@ fn complete_metadata(app: &AppHandle, item: &mut QueueItem, version: &TrackVersi
     let track = search::build_track(versions, 0.0);
     item.track = track.clone();
     let st = app.state::<AppState>();
-    let found = st.queue.lock().unwrap().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = track).is_some();
+    let found = st.queue.locked().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = track).is_some();
     if found {
         emit_queue(app);
     }
@@ -165,7 +166,7 @@ fn complete_artist_later(app: &AppHandle, url: String) {
         };
         let st = app.state::<AppState>();
         let mut found = false;
-        for qi in st.queue.lock().unwrap().items.iter_mut().filter(|i| i.track.versions.iter().any(|v| v.url == url && v.partial)) {
+        for qi in st.queue.locked().items.iter_mut().filter(|i| i.track.versions.iter().any(|v| v.url == url && v.partial)) {
             complete(qi);
             found = true;
         }
@@ -179,7 +180,7 @@ fn complete_artist_later(app: &AppHandle, url: String) {
         });
         // The play was logged with the guessed artist: fix its newest entry.
         let in_history = |e: &crate::store::HistoryEntry| e.track.versions.iter().any(|v| v.url == url && v.partial);
-        let logged = st.store.library.lock().unwrap().history.iter().any(in_history);
+        let logged = st.store.library.locked().history.iter().any(in_history);
         if logged {
             let _ = st.store.update_history(|h| {
                 if let Some(e) = h.iter_mut().find(|e| in_history(e)) {
@@ -209,7 +210,7 @@ async fn load_item(app: &AppHandle, item: &mut QueueItem, token: u64, cancelled:
         }
     };
     if crate::matcher::apply(&mut item.track) {
-        let found = st.queue.lock().unwrap().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = item.track.clone()).is_some();
+        let found = st.queue.locked().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = item.track.clone()).is_some();
         if found {
             emit_queue(app);
         }
@@ -300,7 +301,7 @@ fn remember_match(app: &AppHandle, item: &mut QueueItem, v: &TrackVersion) {
     if !known {
         item.track.versions.push(v.clone());
         let st = app.state::<AppState>();
-        let found = st.queue.lock().unwrap().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = item.track.clone()).is_some();
+        let found = st.queue.locked().items.iter_mut().find(|i| i.uid == item.uid).map(|qi| qi.track = item.track.clone()).is_some();
         if found {
             emit_queue(app);
         }
@@ -314,7 +315,7 @@ fn superseded(st: &AppState, gen: u64) -> bool {
 /// Forget the preloaded next track (queue order or repeat mode changed).
 pub fn invalidate_preload(st: &AppState) {
     st.preload_gen.fetch_add(1, Ordering::SeqCst);
-    if st.preload.lock().unwrap().take().is_some() {
+    if st.preload.locked().take().is_some() {
         st.audio.clear_preload();
     }
 }
@@ -322,9 +323,12 @@ pub fn invalidate_preload(st: &AppState) {
 /// Start playing queue item `index` in the background.
 pub fn spawn_play(app: &AppHandle, index: usize, auto: bool) {
     let app = app.clone();
+    // Which song, by uid: the queue may be reordered or edited before the
+    // task runs, and then `index` would point at a different one.
+    let uid = app.state::<AppState>().queue.locked().items.get(index).map(|i| i.uid);
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
-        match play_index(&app, index).await {
+        match play_index(&app, index, uid).await {
             Ok(()) => st.consecutive_failures.store(0, Ordering::SeqCst),
             Err(AppError::Cancelled) => {}
             Err(e) => {
@@ -333,7 +337,8 @@ pub fn spawn_play(app: &AppHandle, index: usize, auto: bool) {
                     .lock()
                     .unwrap()
                     .items
-                    .get(index)
+                    .iter()
+                    .find(|i| Some(i.uid) == uid)
                     .map(|i| format!("{} — {} [{}]", i.track.artist, i.track.title, i.track.versions.iter().map(|v| v.platform.label()).collect::<Vec<_>>().join(", ")))
                     .unwrap_or_default();
                 crate::report::report_app_error(&format!("playing {what}"), &e);
@@ -353,13 +358,17 @@ pub fn spawn_play(app: &AppHandle, index: usize, auto: bool) {
     });
 }
 
-async fn play_index(app: &AppHandle, index: usize) -> AppResult<()> {
+async fn play_index(app: &AppHandle, index: usize, uid: Option<u64>) -> AppResult<()> {
     let st = app.state::<AppState>();
     let gen = st.load_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let token = st.next_token.fetch_add(1, Ordering::SeqCst) + 1;
     invalidate_preload(&st);
     let mut item = {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
+        let index = match uid {
+            Some(uid) => q.items.iter().position(|i| i.uid == uid).ok_or(AppError::Cancelled)?,
+            None => index,
+        };
         let item = q.items.get(index).cloned().ok_or_else(|| AppError::NotFound("queue item".into()))?;
         q.current = Some(index);
         q.resume_at = None;
@@ -384,7 +393,7 @@ async fn play_index(app: &AppHandle, index: usize) -> AppResult<()> {
     }
     st.audio.play(loaded);
     st.current_token.store(token, Ordering::SeqCst);
-    let resume = st.resume_position.lock().unwrap().take();
+    let resume = st.resume_position.locked().take();
     if let Some((_, pos)) = resume.filter(|(uid, _)| *uid == item.uid) {
         st.audio.seek(pos);
     }
@@ -426,7 +435,7 @@ fn started(app: &AppHandle, mut item: QueueItem, mut version: TrackVersion) {
     maybe_autoplay(app);
     // "Next" is the most likely click; have its stream ready.
     let next = {
-        let q = st.queue.lock().unwrap();
+        let q = st.queue.locked();
         q.current.and_then(|i| q.items.get(i + 1)).map(|n| (n.track.clone(), n.platform))
     };
     if let Some((t, p)) = next {
@@ -437,7 +446,7 @@ fn started(app: &AppHandle, mut item: QueueItem, mut version: TrackVersion) {
 /// Index that should play after the current one (None = stop).
 fn next_index(st: &AppState, auto: bool) -> Option<usize> {
     let repeat = st.store.settings().repeat;
-    let q = st.queue.lock().unwrap();
+    let q = st.queue.locked();
     let len = q.items.len();
     if len == 0 {
         return None;
@@ -468,15 +477,15 @@ pub async fn extend_with_radio(app: &AppHandle, seed: crate::models::Track) -> u
         return 0;
     }
     let st = app.state::<AppState>();
-    let mut exclude: std::collections::HashSet<String> = st.queue.lock().unwrap().items.iter().map(|i| i.track.key.clone()).collect();
-    exclude.extend(st.store.library.lock().unwrap().history.iter().take(100).map(|h| h.track.key.clone()));
+    let mut exclude: std::collections::HashSet<String> = st.queue.locked().items.iter().map(|i| i.track.key.clone()).collect();
+    exclude.extend(st.store.library.locked().history.iter().take(100).map(|h| h.track.key.clone()));
     let found = crate::radio::related(&seed, &exclude, 20, &st.cache).await;
     RADIO_INFLIGHT.store(false, Ordering::SeqCst);
     match found {
         Ok(tracks) => {
             let n = tracks.len();
             {
-                let mut q = st.queue.lock().unwrap();
+                let mut q = st.queue.locked();
                 for t in tracks {
                     let item = q.make(t, None);
                     q.items.push(item);
@@ -501,7 +510,7 @@ fn maybe_autoplay(app: &AppHandle) {
         return;
     }
     let seed = {
-        let q = st.queue.lock().unwrap();
+        let q = st.queue.locked();
         match q.current {
             Some(i) if i + 1 == q.items.len() => q.items[i].track.clone(),
             _ => return,
@@ -531,7 +540,7 @@ pub fn advance(app: &AppHandle, auto: bool) {
         None if auto && st.store.settings().autoplay && !RADIO_INFLIGHT.load(Ordering::SeqCst) => {
             // Queue ran out before autoplay had extended it.
             let seed = {
-                let q = st.queue.lock().unwrap();
+                let q = st.queue.locked();
                 q.current.and_then(|i| q.items.get(i).map(|x| x.track.clone()))
             };
             let app = app.clone();
@@ -569,13 +578,13 @@ pub fn advance(app: &AppHandle, auto: bool) {
 fn maybe_preload(app: &AppHandle) {
     let st = app.state::<AppState>();
     let eng = st.audio.status();
-    if st.now.lock().unwrap().phase != Phase::Active || eng.state != EngineState::Playing {
+    if st.now.locked().phase != Phase::Active || eng.state != EngineState::Playing {
         return;
     }
     if crate::commands::playback::sleep_at() == Some(0) {
         return; // stopping after this song: don't roll into the next one
     }
-    if eng.preloaded.is_some() || st.preload_inflight.load(Ordering::SeqCst) || st.preload.lock().unwrap().is_some() {
+    if eng.preloaded.is_some() || st.preload_inflight.load(Ordering::SeqCst) || st.preload.locked().is_some() {
         return;
     }
     let Some(dur) = eng.duration else { return };
@@ -590,7 +599,7 @@ fn maybe_preload(app: &AppHandle) {
     let Some(idx) = next_index(&st, true) else {
         return;
     };
-    let Some(mut item) = st.queue.lock().unwrap().items.get(idx).cloned() else {
+    let Some(mut item) = st.queue.locked().items.get(idx).cloned() else {
         return;
     };
     let pgen = st.preload_gen.load(Ordering::SeqCst);
@@ -606,7 +615,7 @@ fn maybe_preload(app: &AppHandle) {
         match res {
             Ok((loaded, version)) if !cancelled() => {
                 st.audio.preload(loaded);
-                *st.preload.lock().unwrap() = Some(Preload { uid: item.uid, token, item, version });
+                *st.preload.locked() = Some(Preload { uid: item.uid, token, item, version });
             }
             Ok((loaded, _)) => loaded.cancel(),
             Err(_) => {} // the normal path will retry (and report) at track end
@@ -624,14 +633,14 @@ pub fn on_engine_event(app: &AppHandle, ev: EngineEvent) {
             maybe_preload(app);
         }
         EngineEvent::Advanced { token } => {
-            let pre = st.preload.lock().unwrap().take();
+            let pre = st.preload.locked().take();
             let Some(p) = pre.filter(|p| p.token == token) else {
                 return;
             };
-            let prev = st.now.lock().unwrap().item.clone();
+            let prev = st.now.locked().item.clone();
             let _ = app.emit("track-ended", serde_json::json!({ "item": prev }));
             {
-                let mut q = st.queue.lock().unwrap();
+                let mut q = st.queue.locked();
                 q.current = q.items.iter().position(|i| i.uid == p.uid);
                 q.resume_at = None;
             }
@@ -643,7 +652,7 @@ pub fn on_engine_event(app: &AppHandle, ev: EngineEvent) {
             if token != st.current_token.load(Ordering::SeqCst) {
                 return;
             }
-            let item = st.now.lock().unwrap().item.clone();
+            let item = st.now.locked().item.clone();
             let _ = app.emit("track-ended", serde_json::json!({ "item": item }));
             advance(app, true);
         }
@@ -655,18 +664,18 @@ pub fn on_engine_event(app: &AppHandle, ev: EngineEvent) {
             // device keeps disappearing (no working output at all).
             static RESTARTS: std::sync::Mutex<Vec<std::time::Instant>> = std::sync::Mutex::new(Vec::new());
             let recent = {
-                let mut r = RESTARTS.lock().unwrap();
+                let mut r = RESTARTS.locked();
                 r.retain(|t| t.elapsed() < std::time::Duration::from_secs(60));
                 r.push(std::time::Instant::now());
                 r.len()
             };
             let (index, uid) = {
-                let q = st.queue.lock().unwrap();
+                let q = st.queue.locked();
                 (q.current, q.current.and_then(|i| q.items.get(i)).map(|i| i.uid))
             };
             match (index, uid) {
                 (Some(i), Some(uid)) if recent <= 3 => {
-                    *st.resume_position.lock().unwrap() = Some((uid, position));
+                    *st.resume_position.locked() = Some((uid, position));
                     emit_status(app, "info", "Audio output changed. Continuing on the current device…");
                     spawn_play(app, i, false);
                 }

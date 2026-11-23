@@ -1,5 +1,6 @@
 //! Shared application state and the event helpers every module uses.
 
+use crate::sync_ext::LockExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::{Arc, Mutex};
@@ -152,13 +153,13 @@ static POSITION_SAVE_GEN: AtomicU64 = AtomicU64::new(0);
 
 impl AppState {
     fn saved_position(&self, q: &QueueState) -> (Option<usize>, SavedPosition) {
-        let active = self.now.lock().unwrap().phase == Phase::Active;
+        let active = self.now.locked().phase == Phase::Active;
         let uid = q.current.and_then(|i| q.items.get(i)).map(|i| i.uid);
         let position = if active {
             self.audio.status().position
         } else {
             // Not started since launch: keep the position we restored.
-            self.resume_position.lock().unwrap().filter(|(u, _)| Some(*u) == uid).map(|(_, p)| p).unwrap_or(0.0)
+            self.resume_position.locked().filter(|(u, _)| Some(*u) == uid).map(|(_, p)| p).unwrap_or(0.0)
         };
         (q.current.filter(|_| uid.is_some()), SavedPosition { uid, position })
     }
@@ -173,11 +174,11 @@ impl AppState {
     pub fn save_queue_now(&self) {
         QUEUE_DIRTY.store(false, std::sync::atomic::Ordering::SeqCst);
         let (data, pos) = {
-            let q = self.queue.lock().unwrap();
+            let q = self.queue.locked();
             let (current, pos) = self.saved_position(&q);
             (SavedQueue { items: q.items.clone(), current, position: pos.position }, pos)
         };
-        *self.queue_saved_at.lock().unwrap() = std::time::Instant::now();
+        *self.queue_saved_at.locked() = std::time::Instant::now();
         if let Ok(bytes) = serde_json::to_vec(&data) {
             let _ = crate::store::write_replace(&self.data_dir.join("queue.json"), &bytes);
         }
@@ -186,8 +187,8 @@ impl AppState {
 
     /// Just which entry plays and where.
     pub fn save_position_now(&self) {
-        let pos = self.saved_position(&self.queue.lock().unwrap()).1;
-        *self.queue_saved_at.lock().unwrap() = std::time::Instant::now();
+        let pos = self.saved_position(&self.queue.locked()).1;
+        *self.queue_saved_at.locked() = std::time::Instant::now();
         self.write_position(&pos);
     }
 
@@ -273,9 +274,9 @@ struct StatusMsg {
 impl AppState {
     pub fn playback_state(&self) -> PlaybackState {
         let eng = self.audio.status();
-        let now = self.now.lock().unwrap().clone();
-        let settings = self.store.settings.lock().unwrap();
-        let index = self.queue.lock().unwrap().current;
+        let now = self.now.locked().clone();
+        let settings = self.store.settings.locked();
+        let index = self.queue.locked().current;
         let status = match now.phase {
             Phase::Idle => "idle",
             Phase::Loading => "loading",
@@ -301,17 +302,17 @@ impl AppState {
             current: now.item,
             version: now.version,
             message: now.message,
-            preloaded: self.preload.lock().unwrap().as_ref().filter(|p| eng.preloaded == Some(p.token)).map(|p| p.uid),
+            preloaded: self.preload.locked().as_ref().filter(|p| eng.preloaded == Some(p.token)).map(|p| p.uid),
         }
     }
 
     pub fn queue_snapshot(&self) -> QueueSnapshot {
-        let q = self.queue.lock().unwrap();
+        let q = self.queue.locked();
         QueueSnapshot { items: q.items.clone(), current: q.current }
     }
 
     pub fn set_now(&self, f: impl FnOnce(&mut NowPlaying)) {
-        f(&mut self.now.lock().unwrap());
+        f(&mut self.now.locked());
     }
 
     pub fn downloads_dir(&self) -> PathBuf {
@@ -367,8 +368,8 @@ pub fn emit_tick(app: &AppHandle) {
     let ps = st.playback_state();
     crate::stats::on_tick(&ps);
     // Remember the position now and then, so a restart resumes close to it.
-    if ps.status == "playing" && st.queue_saved_at.lock().unwrap().elapsed().as_secs() >= 10 {
-        *st.queue_saved_at.lock().unwrap() = std::time::Instant::now();
+    if ps.status == "playing" && st.queue_saved_at.locked().elapsed().as_secs() >= 10 {
+        *st.queue_saved_at.locked() = std::time::Instant::now();
         save_position_soon(app);
     }
     st.discord.update(presence(&ps));
@@ -424,7 +425,7 @@ struct QueueCurrent {
 pub fn emit_queue_current(app: &AppHandle) {
     if let Some(st) = app.try_state::<AppState>() {
         let ev = {
-            let q = st.queue.lock().unwrap();
+            let q = st.queue.locked();
             QueueCurrent { current: q.current, uid: q.current.and_then(|i| q.items.get(i)).map(|i| i.uid) }
         };
         let _ = app.emit("queue-current", ev);

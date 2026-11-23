@@ -518,6 +518,7 @@ function showView(name, { push = true, reopen = null } = {}) {
   if (name === 'downloads') renderDownloads();
   if (name === 'local') renderLocal();
   if (name === 'charts') renderCharts();
+  if (name === 'discover') renderDiscover();
   if (name === 'releases') renderReleases();
   if (name === 'home') renderHome();
   if (name === 'stats') renderStats();

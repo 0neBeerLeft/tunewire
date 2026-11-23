@@ -32,8 +32,46 @@ pub fn stream_agent() -> &'static ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT.get_or_init(|| {
         let config = ureq::config::Config::builder().http_status_as_error(false).timeout_connect(Some(Duration::from_secs(10))).timeout_recv_response(Some(Duration::from_secs(15))).build();
-        ureq::Agent::with_parts(config, IdleConnector(DefaultConnector::default()), ureq::unversioned::resolver::DefaultResolver::default())
+        ureq::Agent::with_parts(config, IdleConnector(DefaultConnector::default()), PublicOnly::default())
     })
+}
+
+/// Marker in the error a refused address produces (see `stream::request`).
+pub const LOCAL_REFUSED: &str = "stream points to a local network address";
+
+/// Addresses on this computer or the local network (loopback, private,
+/// link-local, CGNAT, unique-local IPv6, and IPv4-mapped versions of those).
+pub fn is_local_ip(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    let v4_local = |v4: std::net::Ipv4Addr| {
+        let o = v4.octets();
+        v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified() || v4.is_broadcast() || (o[0] == 100 && (64..128).contains(&o[1]))
+    };
+    match ip {
+        IpAddr::V4(v4) => v4_local(v4),
+        IpAddr::V6(v6) => {
+            let seg = v6.segments();
+            v6.is_loopback() || v6.is_unspecified() || (seg[0] & 0xfe00) == 0xfc00 || (seg[0] & 0xffc0) == 0xfe80 || v6.to_ipv4_mapped().is_some_and(v4_local)
+        }
+    }
+}
+
+/// Name resolution that refuses local addresses. Checking the URL's host
+/// text isn't enough: a public name can resolve to 127.0.0.1, and a stream
+/// server can redirect anywhere; every connection (redirects included) goes
+/// through here.
+#[derive(Debug, Default)]
+struct PublicOnly(ureq::unversioned::resolver::DefaultResolver);
+
+impl ureq::unversioned::resolver::Resolver for PublicOnly {
+    fn resolve(&self, uri: &ureq::http::Uri, config: &ureq::config::Config, timeout: NextTimeout) -> Result<ureq::unversioned::resolver::ResolvedSocketAddrs, ureq::Error> {
+        let addrs = self.0.resolve(uri, config, timeout)?;
+        // Offline tests serve their streams from 127.0.0.1.
+        if !cfg!(test) && addrs.iter().any(|a| is_local_ip(a.ip())) {
+            return Err(ureq::Error::Io(std::io::Error::new(std::io::ErrorKind::PermissionDenied, LOCAL_REFUSED)));
+        }
+        Ok(addrs)
+    }
 }
 
 /// The default connections, with every wait for input capped at `STREAM_IDLE`.

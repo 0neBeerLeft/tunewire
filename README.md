@@ -46,6 +46,7 @@ docs/            the website (GitHub Pages): landing page and share-link pages
     Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libayatana-appindicator alsa-lib pkgconf base-devel`
   - **macOS:** Xcode Command Line Tools.
   - **Windows:** MSVC Build Tools + WebView2 (preinstalled on Windows 10/11).
+- **CMake** (all platforms): builds libopus for Opus playback (`winget install Kitware.CMake`, `brew install cmake`, `apt install cmake`). With CMake 4.x, set `CMAKE_POLICY_VERSION_MINIMUM=3.5` or the bundled libopus refuses to configure.
 
 ## Build & run
 

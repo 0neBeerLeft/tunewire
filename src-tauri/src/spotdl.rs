@@ -3,6 +3,7 @@
 //! metadata via `spotdl save … --save-file`. Audio still comes from a matched
 //! YouTube Music / SoundCloud upload (Spotify streams are DRM-protected).
 
+use crate::sync_ext::LockExt;
 use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -48,11 +49,11 @@ static CLIENT_ID: std::sync::Mutex<String> = std::sync::Mutex::new(String::new()
 /// Use personal Spotify app credentials (much faster than spotDL's shared,
 /// rate-limited ones). The secret is read from the keychain only when spotDL runs.
 pub fn set_client_id(id: &str) {
-    *CLIENT_ID.lock().unwrap() = id.trim().to_string();
+    *CLIENT_ID.locked() = id.trim().to_string();
 }
 
 fn credentials() -> Option<(String, String)> {
-    let id = CLIENT_ID.lock().unwrap().clone();
+    let id = CLIENT_ID.locked().clone();
     if id.is_empty() {
         return None;
     }

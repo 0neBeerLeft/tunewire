@@ -1,3 +1,4 @@
+use crate::sync_ext::LockExt;
 use tauri::{AppHandle, State};
 
 use crate::commands::playback::stop;
@@ -22,7 +23,7 @@ pub fn get_queue(st: State<'_, AppState>) -> QueueSnapshot {
 #[tauri::command]
 pub fn add_to_queue(app: AppHandle, st: State<'_, AppState>, tracks: Vec<Track>, next: Option<bool>) -> QueueSnapshot {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let items: Vec<QueueItem> = tracks.into_iter().map(|t| q.make(t, None)).collect();
         let at = if next.unwrap_or(false) { q.current.map(|c| c + 1).unwrap_or(0) } else { q.items.len() };
         let at = at.min(q.items.len());
@@ -40,7 +41,7 @@ pub fn add_to_queue(app: AppHandle, st: State<'_, AppState>, tracks: Vec<Track>,
 #[tauri::command]
 pub fn remove_from_queue(app: AppHandle, st: State<'_, AppState>, uid: u64) -> AppResult<QueueSnapshot> {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let idx = q.items.iter().position(|i| i.uid == uid).ok_or_else(|| AppError::NotFound("queue item".into()))?;
         q.items.remove(idx);
         match q.current {
@@ -64,7 +65,7 @@ pub fn remove_from_queue(app: AppHandle, st: State<'_, AppState>, uid: u64) -> A
 #[tauri::command]
 pub fn clear_queue(app: AppHandle, st: State<'_, AppState>, keep_current: Option<bool>) -> QueueSnapshot {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         if keep_current.unwrap_or(true) {
             if let Some(c) = q.current {
                 let item = q.items[c].clone();
@@ -88,7 +89,7 @@ pub fn clear_queue(app: AppHandle, st: State<'_, AppState>, keep_current: Option
 #[tauri::command]
 pub fn reorder_queue(app: AppHandle, st: State<'_, AppState>, from: usize, to: usize) -> AppResult<QueueSnapshot> {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let len = q.items.len();
         if from >= len || to >= len {
             return Err(AppError::Invalid("queue index out of range".into()));
@@ -114,7 +115,7 @@ pub fn reorder_queue(app: AppHandle, st: State<'_, AppState>, from: usize, to: u
 #[tauri::command]
 pub fn shuffle_queue(app: AppHandle, st: State<'_, AppState>) -> QueueSnapshot {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let start = q.current.map(|c| c + 1).unwrap_or(0);
         // xorshift seeded from the clock — good enough for a shuffle.
         let mut x = store::now_ms() | 1;
@@ -135,7 +136,7 @@ pub fn shuffle_queue(app: AppHandle, st: State<'_, AppState>) -> QueueSnapshot {
 pub fn set_shuffle(app: AppHandle, st: State<'_, AppState>, on: bool) -> QueueSnapshot {
     let _ = st.store.update_settings(|s| s.shuffle = on);
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         if on {
             q.unshuffled = Some(q.items.iter().map(|i| i.uid).collect());
             shuffle_tail(&mut q);
@@ -167,7 +168,7 @@ pub fn shuffle_tail(q: &mut crate::state::QueueState) {
 #[tauri::command]
 pub fn set_item_platform(app: AppHandle, st: State<'_, AppState>, uid: u64, platform: Option<Platform>) -> AppResult<()> {
     {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let it = q.items.iter_mut().find(|i| i.uid == uid).ok_or_else(|| AppError::NotFound("queue item".into()))?;
         it.platform = platform;
     }

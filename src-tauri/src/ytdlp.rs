@@ -2,6 +2,7 @@
 //! goes through a yt-dlp child process. Concurrency is capped by a semaphore and
 //! transient failures are retried with exponential backoff.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
@@ -200,7 +201,12 @@ pub struct StreamInfo {
 
 /// Format preference: AAC/MP3 first (cheap, precise seeking), then Opus/WebM
 /// (decoded via libopus), then anything else.
-pub const AUDIO_FORMAT: &str = "bestaudio[acodec^=mp4a]/bestaudio[ext=m4a]/bestaudio[acodec=mp3]/bestaudio[acodec=opus]/bestaudio[acodec=flac]/bestaudio[acodec=vorbis]/bestaudio";
+/// AAC-LC (`mp4a.40.2`) only: HE-AAC (`mp4a.40.5`, YouTube's format 139) and
+/// HE-AACv2 (`.29`) need SBR/PS decoding, which symphonia doesn't have. It
+/// plays only their low-band core: no treble above ~11 kHz and often mono,
+/// which sounds muffled and boomy ("bass boosted"). Opus is next best.
+pub const AUDIO_FORMAT: &str =
+    "bestaudio[acodec=mp4a.40.2]/bestaudio[acodec=mp3]/bestaudio[acodec=opus]/bestaudio[acodec=flac]/bestaudio[acodec=vorbis]/bestaudio[acodec!*=mp4a.40.5][acodec!*=mp4a.40.29]/bestaudio";
 
 // Equivalent of `yt-dlp -g -f bestaudio --no-playlist <url>`, but via `-j` so
 // we also receive the HTTP headers, codec and duration of the chosen format.
@@ -216,7 +222,7 @@ static STREAMS: std::sync::Mutex<Option<HashMap<String, (std::time::Instant, Str
 const STREAM_TTL: Duration = Duration::from_secs(15 * 60);
 
 fn stream_cell(url: &str) -> StreamCell {
-    let mut guard = STREAMS.lock().unwrap();
+    let mut guard = STREAMS.locked();
     let map = guard.get_or_insert_with(HashMap::new);
     map.retain(|_, (t, c)| t.elapsed() < STREAM_TTL && !matches!(c.get(), Some(Err(_))));
     if map.len() > 200 {
@@ -233,7 +239,7 @@ pub async fn stream_info(url: &str) -> AppResult<StreamInfo> {
 
 /// Drop a cached stream (it failed to open, e.g. expired).
 pub fn forget_stream(url: &str) {
-    if let Some(map) = STREAMS.lock().unwrap().as_mut() {
+    if let Some(map) = STREAMS.locked().as_mut() {
         map.remove(url);
     }
 }
@@ -246,7 +252,7 @@ const MAX_PREFETCH: usize = 2;
 /// work). Returns false when it was dropped, so the page can ask again later.
 pub fn prefetch_stream(url: String) -> bool {
     static PREFETCH: OnceLock<Arc<Semaphore>> = OnceLock::new();
-    let fresh = STREAMS.lock().unwrap().as_ref().and_then(|m| m.get(&url).map(|(t, c)| t.elapsed() < STREAM_TTL && !matches!(c.get(), Some(Err(_))))).unwrap_or(false);
+    let fresh = STREAMS.locked().as_ref().and_then(|m| m.get(&url).map(|(t, c)| t.elapsed() < STREAM_TTL && !matches!(c.get(), Some(Err(_))))).unwrap_or(false);
     if fresh {
         return true; // already resolved or in flight
     }
@@ -278,12 +284,12 @@ const VISITOR_TTL: Duration = Duration::from_secs(24 * 3600);
 static VISITOR: std::sync::Mutex<Option<(std::time::Instant, String)>> = std::sync::Mutex::new(None);
 
 fn cached_visitor_data() -> Option<String> {
-    VISITOR.lock().unwrap().as_ref().filter(|(t, _)| t.elapsed() < VISITOR_TTL).map(|(_, v)| v.clone())
+    VISITOR.locked().as_ref().filter(|(t, _)| t.elapsed() < VISITOR_TTL).map(|(_, v)| v.clone())
 }
 
 /// YouTube rejected it: the next lookup fetches a new one.
 fn forget_visitor_data() {
-    *VISITOR.lock().unwrap() = None;
+    *VISITOR.locked() = None;
 }
 
 /// `"VISITOR_DATA":"…"` from a YouTube page.
@@ -316,7 +322,7 @@ async fn visitor_data() -> Option<String> {
         return Some(v);
     }
     let vd = tauri::async_runtime::spawn_blocking(fetch_visitor_data).await.ok().flatten()?;
-    *VISITOR.lock().unwrap() = Some((std::time::Instant::now(), vd.clone()));
+    *VISITOR.locked() = Some((std::time::Instant::now(), vd.clone()));
     Some(vd)
 }
 

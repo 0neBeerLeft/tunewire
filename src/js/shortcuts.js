@@ -46,6 +46,11 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !(t.type === 'range' || t.type === 'checkbox');
   if (typing || modalStack.length) return;
+  // A focused slider (EQ, volume, settings) keeps its own arrow/Home/End/Page
+  // keys, and a focused checkbox its Space: they adjust that control instead
+  // of seeking or pausing the song.
+  if (t.type === 'range' && /^(Arrow|Home$|End$|Page)/.test(e.key)) return;
+  if (t.type === 'checkbox' && e.key === ' ') return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#search-input').focus(); $('#search-input').select(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); return; }
   if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); return; }

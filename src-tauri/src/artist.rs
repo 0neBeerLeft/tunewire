@@ -4,6 +4,7 @@
 //!   - albums: YouTube Music "albums" search, each album resolved in parallel;
 //!   - album:  a YouTube Music album page (or any playlist URL).
 
+use crate::sync_ext::LockExt;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -173,12 +174,18 @@ pub async fn album_cover(url: &str) -> AppResult<Option<String>> {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(hit) = cache.lock().unwrap().get(url) {
+    if let Some(hit) = cache.locked().get(url) {
         return Ok(hit.clone());
     }
     let v = ytdlp::flat(url, Some(1)).await?;
     let cover = thumb(&v).or_else(|| entries(&v).first().and_then(|e| e.get("id").and_then(Value::as_str)).map(|id| format!("https://i.ytimg.com/vi/{id}/hqdefault.jpg")));
-    cache.lock().unwrap().insert(url.to_string(), cover.clone());
+    {
+        let mut c = cache.locked();
+        if c.len() >= 500 {
+            c.clear();
+        }
+        c.insert(url.to_string(), cover.clone());
+    }
     Ok(cover)
 }
 

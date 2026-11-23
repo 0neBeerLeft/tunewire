@@ -1,3 +1,4 @@
+use crate::sync_ext::LockExt;
 use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, State};
@@ -11,7 +12,7 @@ use crate::state::{emit_playback, emit_queue, AppState, Phase, PlaybackState, Qu
 pub fn play_track_inner(app: &AppHandle, st: &AppState, mut track: Track, platform: Option<Platform>) {
     crate::matcher::apply(&mut track);
     let idx = {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let item = q.make(track, platform);
         let at = q.current.map(|c| c + 1).unwrap_or(q.items.len()).min(q.items.len());
         q.items.insert(at, item);
@@ -27,7 +28,7 @@ pub fn set_queue_and_play(app: &AppHandle, st: &AppState, tracks: Vec<Track>, st
     crate::matcher::prepare(app, tracks.iter().skip(start).take(40).cloned().collect());
     let shuffle = st.store.settings().shuffle;
     let start = {
-        let mut q = st.queue.lock().unwrap();
+        let mut q = st.queue.locked();
         let items: Vec<QueueItem> = tracks.into_iter().map(|t| q.make(t, None)).collect();
         q.items = items;
         q.current = None;
@@ -47,7 +48,7 @@ pub fn set_queue_and_play(app: &AppHandle, st: &AppState, tracks: Vec<Track>, st
             start
         }
     };
-    let len = st.queue.lock().unwrap().items.len();
+    let len = st.queue.locked().items.len();
     emit_queue(app);
     if len > 0 {
         spawn_play(app, start.min(len - 1), false);
@@ -68,7 +69,7 @@ pub fn play_tracks(app: AppHandle, st: State<'_, AppState>, tracks: Vec<Track>, 
 
 #[tauri::command]
 pub fn play_index_cmd(app: AppHandle, st: State<'_, AppState>, index: usize) -> AppResult<()> {
-    if index >= st.queue.lock().unwrap().items.len() {
+    if index >= st.queue.locked().items.len() {
         return Err(AppError::NotFound("queue index".into()));
     }
     spawn_play(&app, index, false);
@@ -83,10 +84,10 @@ pub fn next_track(app: AppHandle) {
 #[tauri::command]
 pub fn previous_track(app: AppHandle, st: State<'_, AppState>) {
     let pos = st.audio.status().position;
-    let cur = st.queue.lock().unwrap().current;
+    let cur = st.queue.locked().current;
     match cur {
         Some(i) if pos < 3.0 && i > 0 => spawn_play(&app, i - 1, false),
-        Some(_) if st.now.lock().unwrap().phase == Phase::Active => st.audio.seek(0.0),
+        Some(_) if st.now.locked().phase == Phase::Active => st.audio.seek(0.0),
         Some(i) => spawn_play(&app, i, false),
         None => {}
     }
@@ -100,12 +101,12 @@ pub fn pause(app: AppHandle, st: State<'_, AppState>) {
 
 #[tauri::command]
 pub fn resume(app: AppHandle, st: State<'_, AppState>) {
-    let (phase, cur) = (st.now.lock().unwrap().phase, st.queue.lock().unwrap().current);
+    let (phase, cur) = (st.now.locked().phase, st.queue.locked().current);
     match (phase, cur) {
         (Phase::Active, _) => st.audio.resume(),
         // Nothing loaded (fresh start / after error): (re)start the current item.
         (Phase::Idle | Phase::Error, Some(i)) => spawn_play(&app, i, false),
-        (Phase::Idle | Phase::Error, None) if !st.queue.lock().unwrap().items.is_empty() => spawn_play(&app, 0, false),
+        (Phase::Idle | Phase::Error, None) if !st.queue.locked().items.is_empty() => spawn_play(&app, 0, false),
         _ => {}
     }
     emit_soon(&app);
@@ -113,7 +114,7 @@ pub fn resume(app: AppHandle, st: State<'_, AppState>) {
 
 #[tauri::command]
 pub fn toggle_pause(app: AppHandle, st: State<'_, AppState>) {
-    if st.audio.status().state == EngineState::Playing && st.now.lock().unwrap().phase == Phase::Active {
+    if st.audio.status().state == EngineState::Playing && st.now.locked().phase == Phase::Active {
         pause(app, st);
     } else {
         resume(app, st);
@@ -148,12 +149,12 @@ static SLEEP_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::n
 
 /// When playback will stop: a ms timestamp, or 0 = at the end of this song.
 pub fn sleep_at() -> Option<u64> {
-    *SLEEP_AT.lock().unwrap()
+    *SLEEP_AT.locked()
 }
 
 /// Called when a song ends: true if the sleep timer wants playback to stop now.
 pub fn sleep_due_at_track_end() -> bool {
-    let mut g = SLEEP_AT.lock().unwrap();
+    let mut g = SLEEP_AT.locked();
     if *g == Some(0) {
         *g = None;
         return true;
@@ -172,7 +173,7 @@ pub fn set_sleep_timer(app: AppHandle, st: State<'_, AppState>, minutes: Option<
     } else {
         minutes.filter(|m| *m > 0.0).map(|m| crate::store::now_ms() + (m * 60_000.0) as u64)
     };
-    *SLEEP_AT.lock().unwrap() = at;
+    *SLEEP_AT.locked() = at;
     if let Some(deadline) = at.filter(|a| *a > 0) {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -181,7 +182,7 @@ pub fn set_sleep_timer(app: AppHandle, st: State<'_, AppState>, minutes: Option<
             if SLEEP_GEN.load(Ordering::SeqCst) != gen {
                 return;
             }
-            *SLEEP_AT.lock().unwrap() = None;
+            *SLEEP_AT.locked() = None;
             let st = tauri::Manager::state::<AppState>(&app);
             st.audio.pause();
             emit_playback(&app);

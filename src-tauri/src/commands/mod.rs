@@ -4,6 +4,7 @@ pub mod browse;
 pub mod cloud;
 pub mod customize;
 pub mod discover;
+pub mod discovery;
 pub mod explore;
 pub mod extras;
 pub mod foryou;

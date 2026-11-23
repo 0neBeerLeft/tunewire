@@ -2,6 +2,7 @@
 //! Runs on its own thread; the app feeds it playback snapshots and it decides
 //! when to push an update (Discord allows ~5 updates / 20 s).
 
+use crate::sync_ext::LockExt;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -42,7 +43,7 @@ impl DiscordHandle {
         DiscordHandle(tx, status)
     }
     pub fn status(&self) -> String {
-        self.1.lock().unwrap().clone()
+        self.1.locked().clone()
     }
     pub fn configure(&self, enabled: bool, client_id: &str, buttons: bool) {
         let _ = self.0.send(Msg::Config { enabled, client_id: client_id.trim().to_string(), buttons });
@@ -57,7 +58,7 @@ fn now() -> i64 {
 }
 
 fn set(status: &Status, s: impl Into<String>) {
-    *status.lock().unwrap() = s.into();
+    *status.locked() = s.into();
 }
 
 /// Read Discord's reply to a command; returns its error message if it rejected it.

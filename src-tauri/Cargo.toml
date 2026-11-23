@@ -60,7 +60,9 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
+# Unwind (not abort): a panic in one background thread (lyrics, a decoder,
+# the cloud) ends that thread instead of killing playback and the window.
+panic = "unwind"
 strip = true
 
 # librespot-core with one change: it calls process::exit(1) for non-Premium

@@ -8,6 +8,7 @@
 //! short and scrubbed (home folder, stream URLs), de-duplicated and
 //! rate-limited here as well.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
@@ -85,11 +86,11 @@ fn should_send(kind: &str, message: &str) -> bool {
         return false;
     }
     let sig = format!("{kind}|{}", message.lines().next().unwrap_or("").chars().take(160).collect::<String>());
-    let mut seen = SEEN.lock().unwrap();
+    let mut seen = SEEN.locked();
     if !seen.get_or_insert_with(HashSet::new).insert(sig) {
         return false; // already reported this session
     }
-    let mut last = LAST.lock().unwrap();
+    let mut last = LAST.locked();
     if last.is_some_and(|t| t.elapsed() < Duration::from_secs(3)) && kind != "crash" {
         return false;
     }

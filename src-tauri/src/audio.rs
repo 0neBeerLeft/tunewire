@@ -14,6 +14,7 @@
 //! The next track can be preloaded: its decode thread starts early and fills
 //! its channel, so switching is instant (gapless), or overlapped (crossfade).
 
+use crate::sync_ext::LockExt;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
@@ -24,6 +25,7 @@ use rodio::{ChannelCount, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate
 use serde::Serialize;
 
 use crate::decoder::AudioDecoder;
+use crate::dynamics::{Limiter, Loudness};
 use crate::eq::{EqParams, Equalizer};
 use crate::error::{AppError, AppResult};
 use crate::stream::{OpenedStream, Shared};
@@ -31,10 +33,6 @@ use crate::stream::{OpenedStream, Shared};
 const CHUNK_FRAMES: usize = 2048;
 /// ~3 s of audio at 48 kHz stereo.
 const CHANNEL_CHUNKS: usize = 72;
-/// Loudness target (RMS) for normalization, about -18 dBFS.
-const TARGET_RMS: f32 = 0.125;
-/// Seconds of audio used to estimate a track's loudness.
-const MEASURE_SECS: f32 = 15.0;
 
 /// Rebuilds the decoder positioned near `t`; returns it with its actual start time.
 type Reopen = Arc<dyn Fn(f64) -> AppResult<(AudioDecoder, f64)> + Send + Sync>;
@@ -114,15 +112,15 @@ struct FeedCtl {
 impl FeedCtl {
     /// Ask the decoder thread to continue from `target` seconds.
     fn request_seek(&self, target: f64) {
-        let mut req = self.seek_req.lock().unwrap();
+        let mut req = self.seek_req.locked();
         let epoch = self.epoch.fetch_add(1, Ordering::AcqRel) + 1;
         *req = Some((target, epoch));
-        *self.base_pos.lock().unwrap() = target;
+        *self.base_pos.locked() = target;
         self.playing_epoch.store(u64::MAX, Ordering::Release);
     }
 
     fn position(&self) -> f64 {
-        let base = *self.base_pos.lock().unwrap();
+        let base = *self.base_pos.locked();
         if self.playing_epoch.load(Ordering::Acquire) != self.epoch.load(Ordering::Acquire) {
             return base;
         }
@@ -143,7 +141,7 @@ fn send_chunk(tx: &SyncSender<Chunk>, mut c: Chunk, ctl: &FeedCtl) -> SendResult
         match tx.try_send(c) {
             Ok(()) => return SendResult::Sent,
             Err(TrySendError::Full(back)) => {
-                if ctl.stop.load(Ordering::Relaxed) || ctl.seek_req.lock().unwrap().is_some() {
+                if ctl.stop.load(Ordering::Relaxed) || ctl.seek_req.locked().is_some() {
                     return SendResult::Interrupted;
                 }
                 c = back;
@@ -154,40 +152,10 @@ fn send_chunk(tx: &SyncSender<Chunk>, mut c: Chunk, ctl: &FeedCtl) -> SendResult
     }
 }
 
-/// Running loudness estimate over the first seconds of a track.
-struct Loudness {
-    sum_sq: f64,
-    frames: u64,
-    frozen: bool,
-}
-
-impl Loudness {
-    fn feed(&mut self, samples: &[f32], ch: usize, rate: u32, ctl: &FeedCtl) {
-        if self.frozen {
-            return;
-        }
-        for f in samples.chunks_exact(ch) {
-            let mid: f32 = f.iter().sum::<f32>() / ch as f32;
-            self.sum_sq += (mid * mid) as f64;
-        }
-        self.frames += (samples.len() / ch) as u64;
-        let secs = self.frames as f32 / rate as f32;
-        if secs >= 1.0 {
-            let rms = (self.sum_sq / self.frames as f64).sqrt() as f32;
-            // Quiet intros shouldn't be boosted to the moon: cap the gain.
-            let gain = if rms > 1e-4 { (TARGET_RMS / rms).clamp(0.25, 2.5) } else { 1.0 };
-            ctl.gain.store(gain.to_bits(), Ordering::Relaxed);
-        }
-        if secs >= MEASURE_SECS {
-            self.frozen = true;
-        }
-    }
-}
-
 fn decode_loop(mut dec: AudioDecoder, reopen: Option<Reopen>, ctl: Arc<FeedCtl>, tx: SyncSender<Chunk>) {
     let ch = ctl.channels as usize;
     let mut finished = false;
-    let mut loud = Loudness { sum_sq: 0.0, frames: 0, frozen: false };
+    let mut loud = Loudness::new(ctl.rate, ctl.channels);
     // Epoch the chunks we produce belong to, and where decoding is (seconds).
     let mut epoch = ctl.epoch.load(Ordering::Acquire);
     let mut dec_pos = 0.0f64;
@@ -195,7 +163,7 @@ fn decode_loop(mut dec: AudioDecoder, reopen: Option<Reopen>, ctl: Arc<FeedCtl>,
         if ctl.stop.load(Ordering::Relaxed) {
             return;
         }
-        let req = ctl.seek_req.lock().unwrap().take();
+        let req = ctl.seek_req.locked().take();
         if let Some((t, e)) = req {
             let ok = match &reopen {
                 Some(reopen) => match reopen(t) {
@@ -240,7 +208,9 @@ fn decode_loop(mut dec: AudioDecoder, reopen: Option<Reopen>, ctl: Arc<FeedCtl>,
         // Keep chunks frame-aligned so channels never get swapped.
         samples.truncate(samples.len() / ch * ch);
         dec_pos += (samples.len() / ch) as f64 / ctl.rate as f64;
-        loud.feed(&samples, ch, ctl.rate, &ctl);
+        if loud.feed(&samples) {
+            ctl.gain.store(loud.gain().to_bits(), Ordering::Relaxed);
+        }
         let mut out = Vec::with_capacity(2);
         if !samples.is_empty() {
             out.push(Chunk { epoch, samples });
@@ -267,6 +237,7 @@ fn decode_loop(mut dec: AudioDecoder, reopen: Option<Reopen>, ctl: Arc<FeedCtl>,
 
 struct FeedSource {
     rx: Receiver<Chunk>,
+    /// Processed (EQ, gain, limiter) samples of the current chunk.
     cur: Vec<f32>,
     /// Epoch of `cur`: a seek drops the rest of it right away.
     cur_epoch: u64,
@@ -285,6 +256,9 @@ struct FeedSource {
     drained: Arc<AtomicBool>,
     eq: Equalizer,
     eq_params: Arc<EqParams>,
+    limiter: Limiter,
+    /// The end-of-stream marker arrived; `cur` holds the limiter's tail.
+    ending: bool,
 }
 
 impl FeedSource {
@@ -301,15 +275,28 @@ impl FeedSource {
         self.target = if self.ctl.normalize.load(Ordering::Relaxed) { f32::from_bits(self.ctl.gain.load(Ordering::Relaxed)) } else { 1.0 };
         self.eq.refresh(&self.eq_params);
     }
-}
 
-#[inline]
-fn soft_clip(x: f32) -> f32 {
-    let a = x.abs();
-    if a <= 0.9 {
-        x
-    } else {
-        x.signum() * (0.9 + 0.1 * ((a - 0.9) / 0.1).tanh())
+    /// EQ, normalization gain (gliding, ~0.2 s) and the peak limiter, for one
+    /// whole chunk.
+    fn process(&mut self, samples: &mut [f32]) {
+        let ch = self.ctl.channels as usize;
+        let eq = self.eq.active();
+        // Per frame; the same time constant as the old per-sample glide.
+        let k = 0.00005 * ch as f32;
+        for f in samples.chunks_exact_mut(ch) {
+            self.gain += (self.target - self.gain) * k;
+            if (self.gain - self.target).abs() < 1e-6 {
+                self.gain = self.target;
+            }
+            for (c, s) in f.iter_mut().enumerate() {
+                let mut x = *s;
+                if eq {
+                    x = self.eq.process(x, c);
+                }
+                *s = x * self.gain;
+            }
+        }
+        self.limiter.process(samples);
     }
 }
 
@@ -324,22 +311,18 @@ impl Iterator for FeedSource {
         }
         loop {
             if self.idx < self.cur.len() && self.cur_epoch != self.ctl.epoch.load(Ordering::Relaxed) {
+                // Seek: drop what's left, including audio held by the limiter.
                 self.idx = self.cur.len();
+                self.ending = false;
+                self.limiter.reset();
             }
             if self.idx < self.cur.len() {
-                let mut s = self.cur[self.idx];
-                let ch = (self.out_count % self.ctl.channels as u64) as usize;
+                let s = self.cur[self.idx];
                 self.idx += 1;
                 self.out_count += 1;
-                s = self.eq.process(s, ch);
                 self.pending += 1;
                 if self.pending >= 1024 {
                     self.flush_played();
-                }
-                // Glide towards the target gain (~0.5 s) to avoid audible steps.
-                self.gain += (self.target - self.gain) * 0.00005;
-                if self.gain != 1.0 || self.eq.active() {
-                    s = soft_clip(s * self.gain);
                 }
                 return Some(s);
             }
@@ -348,6 +331,10 @@ impl Iterator for FeedSource {
             if !self.out_count.is_multiple_of(self.ctl.channels as u64) {
                 self.out_count += 1;
                 return Some(0.0);
+            }
+            if self.ending {
+                self.drained.store(true, Ordering::Release);
+                return None;
             }
             match self.rx.try_recv() {
                 Ok(c) => {
@@ -358,16 +345,23 @@ impl Iterator for FeedSource {
                     if self.ctl.playing_epoch.swap(current, Ordering::AcqRel) != current {
                         self.ctl.played.store(0, Ordering::Relaxed);
                         self.pending = 0;
+                        self.limiter.reset();
                     }
                     if c.samples.is_empty() {
-                        self.drained.store(true, Ordering::Release);
-                        return None;
+                        // Play out what the limiter's look-ahead still holds.
+                        self.cur = self.limiter.flush();
+                        self.cur_epoch = c.epoch;
+                        self.idx = 0;
+                        self.ending = true;
+                        continue;
                     }
                     self.ctl.underrun.store(false, Ordering::Relaxed);
-                    self.cur = c.samples;
+                    self.refresh_target();
+                    let mut samples = c.samples;
+                    self.process(&mut samples);
+                    self.cur = samples;
                     self.cur_epoch = c.epoch;
                     self.idx = 0;
-                    self.refresh_target();
                 }
                 Err(TryRecvError::Empty) => {
                     self.ctl.underrun.store(true, Ordering::Relaxed);
@@ -519,7 +513,7 @@ impl AudioHandle {
         let _ = self.tx.send(Cmd::Config { crossfade: crossfade.clamp(0.0, 12.0), normalize });
     }
     pub fn status(&self) -> EngineStatus {
-        self.status.lock().unwrap().clone()
+        self.status.locked().clone()
     }
 }
 
@@ -572,6 +566,8 @@ fn start_decoding(t: LoadedTrack, normalize: Arc<AtomicBool>, eq_params: Arc<EqP
         drained: drained.clone(),
         eq: Equalizer::new(rate, channels),
         eq_params,
+        limiter: Limiter::new(rate, channels),
+        ending: false,
     };
     Prepared { token, ctl, shared, duration, feed, drained }
 }
@@ -585,8 +581,8 @@ struct Active {
     drained: Arc<AtomicBool>,
     /// Fade multiplier (0..1) applied on top of the user volume.
     fade: f32,
-    /// Crossfade-in in progress: (start, seconds).
-    fade_in: Option<(Instant, f32)>,
+    /// Crossfade-in in progress: (seconds played of it, length in seconds).
+    fade_in: Option<(f32, f32)>,
 }
 
 impl Active {
@@ -666,8 +662,19 @@ fn activate(p: Prepared, device: &MixerDeviceSink, volume: f32, fade: f32, pause
 
 struct Fade {
     out: Active,
-    started: Instant,
+    /// Seconds of the fade played so far (time while paused doesn't count).
+    elapsed: f32,
     secs: f32,
+}
+
+/// Equal-power crossfade curves: the sum of two unrelated songs keeps the
+/// same loudness all the way through (linear fades dip ~3 dB in the middle).
+fn fade_out_curve(k: f32) -> f32 {
+    (k.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2).cos()
+}
+
+fn fade_in_curve(k: f32) -> f32 {
+    (k.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2).sin()
 }
 
 fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, eq: Arc<EqParams>, on_event: impl Fn(EngineEvent)) {
@@ -680,6 +687,8 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
     let mut crossfade = 0.0f32;
     let normalize = Arc::new(AtomicBool::new(true));
     let mut last_tick = Instant::now();
+    // For advancing crossfades by playing time only.
+    let mut last_loop = Instant::now();
     // (token, samples pulled, since when) for noticing a dead output device.
     let mut watch: (u64, u64, Instant) = (0, 0, Instant::now());
 
@@ -788,12 +797,15 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
             Err(RecvTimeoutError::Disconnected) => return,
         }
 
-        // Fades in progress.
+        // Fades in progress (they stand still while paused).
+        let dt = if state == EngineState::Playing { last_loop.elapsed().as_secs_f32() } else { 0.0 };
+        last_loop = Instant::now();
         let mut i = 0;
         while i < fading.len() {
             let f = &mut fading[i];
-            let k = (f.started.elapsed().as_secs_f32() / f.secs.max(0.01)).min(1.0);
-            f.out.fade = 1.0 - k;
+            f.elapsed += dt;
+            let k = (f.elapsed / f.secs.max(0.01)).min(1.0);
+            f.out.fade = fade_out_curve(k);
             f.out.player.set_volume(perceptual(volume) * f.out.fade);
             if k >= 1.0 || f.out.player.empty() {
                 fading.remove(i).out.shutdown();
@@ -802,10 +814,13 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
             }
         }
         if let Some(c) = cur.as_mut() {
-            if let Some((start, secs)) = c.fade_in {
-                c.fade = (start.elapsed().as_secs_f32() / secs.max(0.01)).min(1.0);
+            if let Some((elapsed, secs)) = c.fade_in {
+                let elapsed = elapsed + dt;
+                let k = (elapsed / secs.max(0.01)).min(1.0);
+                c.fade = fade_in_curve(k);
+                c.fade_in = Some((elapsed, secs));
                 c.player.set_volume(perceptual(volume) * c.fade);
-                if c.fade >= 1.0 {
+                if k >= 1.0 {
                     c.fade_in = None;
                 }
             }
@@ -830,11 +845,11 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
                     let fade_in = if start_crossfade { 0.0 } else { 1.0 };
                     let mut new = activate(p, device.as_ref().unwrap(), volume, fade_in, false);
                     if start_crossfade {
-                        new.fade_in = Some((Instant::now(), crossfade));
+                        new.fade_in = Some((0.0, crossfade));
                     }
                     let token = new.token;
                     if start_crossfade {
-                        fading.push(Fade { out: old, started: Instant::now(), secs: crossfade });
+                        fading.push(Fade { out: old, elapsed: 0.0, secs: crossfade });
                     } else {
                         old.shutdown();
                     }
@@ -882,7 +897,7 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
         }
 
         {
-            let mut st = status.lock().unwrap();
+            let mut st = status.locked();
             st.state = state;
             st.preloaded = next.as_ref().map(|n| n.token);
             match &cur {
@@ -911,7 +926,6 @@ fn engine(rx: Receiver<Cmd>, status: Arc<Mutex<EngineStatus>>, mut volume: f32, 
 
 #[cfg(test)]
 mod tests {
-    use super::soft_clip;
     #[test]
     #[ignore]
     fn list_devices_live() {
@@ -972,13 +986,6 @@ mod tests {
         assert!((p.ctl.position() - 7.0).abs() < 0.05);
         p.ctl.stop.store(true, Ordering::Relaxed);
         let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn soft_clip_is_bounded_and_transparent() {
-        assert_eq!(soft_clip(0.5), 0.5);
-        assert!(soft_clip(3.0) <= 1.0 && soft_clip(3.0) > 0.95);
-        assert!(soft_clip(-3.0) >= -1.0);
     }
 }
 

@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{AppError, AppResult};
 
-pub const GALLERY_BASE: &str = "https://raw.githubusercontent.com/WorldCNC/tunewire/main/gallery/";
+pub const GALLERY_BASE: &str = "https://raw.githubusercontent.com/0neBeerLeft/tunewire/main/gallery/";
 const MAX_FILE: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

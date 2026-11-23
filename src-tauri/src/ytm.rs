@@ -2,6 +2,7 @@
 //! returns a whole artist page, album or search shelf with full metadata, in
 //! well under a second, where the equivalent yt-dlp listings take several.
 
+use crate::sync_ext::LockExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -60,7 +61,7 @@ const CACHE_MAX: usize = 40;
 /// POST with a 20-minute response cache (pages are revisited a lot).
 async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
     let key = format!("{endpoint}|{extra}");
-    let hit = CACHE.lock().unwrap().as_ref().and_then(|m| m.get(&key).cloned());
+    let hit = CACHE.locked().as_ref().and_then(|m| m.get(&key).cloned());
     if let Some((at, text)) = hit {
         if at.elapsed() < TTL {
             return Ok(serde_json::from_str(&text)?);
@@ -69,7 +70,7 @@ async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
     let ep = endpoint.to_string();
     let v = tauri::async_runtime::spawn_blocking(move || post_blocking(&ep, extra)).await.map_err(|e| AppError::Network(e.to_string()))??;
     let text: std::sync::Arc<str> = serde_json::to_string(&v)?.into();
-    let mut g = CACHE.lock().unwrap();
+    let mut g = CACHE.locked();
     let m = g.get_or_insert_with(HashMap::new);
     m.retain(|_, (at, _)| at.elapsed() < TTL);
     while m.len() >= CACHE_MAX {
@@ -682,8 +683,20 @@ pub async fn moods() -> AppResult<Vec<MoodSection>> {
 /// A mood or genre page: shelves of playlists.
 pub async fn mood_page(params: &str) -> AppResult<Vec<Shelf>> {
     let v = post("browse", serde_json::json!({ "browseId": "FEmusic_moods_and_genres_category", "params": params })).await?;
+    Ok(browse_shelves(&v))
+}
+
+/// New albums and singles across YouTube Music (the "New releases" page).
+pub async fn new_releases() -> AppResult<Vec<Card>> {
+    let v = post("browse", serde_json::json!({ "browseId": "FEmusic_new_releases_albums" })).await?;
+    let mut seen = std::collections::HashSet::new();
+    Ok(browse_shelves(&v).into_iter().flat_map(|s| s.cards).filter(|c| c.browse_id.as_ref().is_some_and(|b| seen.insert(b.clone()))).collect())
+}
+
+/// Carousels and grids of a single-column browse page.
+fn browse_shelves(v: &Value) -> Vec<Shelf> {
     let sections = v.pointer("/contents/singleColumnBrowseResultsRenderer/tabs/0/tabRenderer/content/sectionListRenderer/contents").and_then(Value::as_array).cloned().unwrap_or_default();
-    Ok(sections
+    sections
         .iter()
         .filter_map(|s| {
             let (title, body) = if let Some(c) = s.get("musicCarouselShelfRenderer") {
@@ -695,7 +708,7 @@ pub async fn mood_page(params: &str) -> AppResult<Vec<Shelf>> {
             let cards = shelf_items(body);
             (!cards.is_empty()).then_some(Shelf { title, cards })
         })
-        .collect())
+        .collect()
 }
 
 #[cfg(test)]
@@ -736,6 +749,19 @@ mod tests {
         let song = s.items[1].track.as_ref().expect("a playable song");
         assert_eq!((s.items[1].kind.as_str(), song.artist.as_str(), song.versions[0].id.as_str()), ("song", "Daft Punk", "vid1"));
         assert!(s.items[1].thumbnail.is_some());
+    }
+
+    #[test]
+    #[ignore]
+    fn live_new_releases() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _g = rt.enter();
+        let r = rt.block_on(new_releases()).unwrap();
+        for c in r.iter().take(8) {
+            println!("{:<7} {} | {} | {:?} | thumb={}", c.kind, c.title, c.subtitle, c.browse_id, c.thumbnail.is_some());
+        }
+        assert!(r.len() >= 10, "{}", r.len());
+        assert!(r.iter().all(|c| c.browse_id.is_some()));
     }
 
     #[test]

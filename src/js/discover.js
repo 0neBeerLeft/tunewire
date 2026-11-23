@@ -62,8 +62,9 @@ async function renderDiscover(force = false) {
       if (!state.moods) state.moods = await call('ytm_moods');
       if (seq !== disc.seq) return;
       const all = state.moods.flatMap((s) => s.items);
-      moods.replaceChildren(...all.slice(0, 16).map((m, i) => h('button', { class: 'disc-mood', style: `--c:${saturate(m.color)};--i:${i}`, onclick: () => openMood(m) }, m.title)),
-        all.length > 16 ? h('button', { class: 'disc-mood more', onclick: () => { showView('search'); } }, 'All moods & genres') : null);
+      const chips = all.slice(0, 16).map((m, i) => h('button', { class: 'disc-mood', style: `--c:${saturate(m.color)};--i:${i}`, onclick: () => openMood(m) }, m.title));
+      if (all.length > 16) chips.push(h('button', { class: 'disc-mood more', onclick: () => showView('search') }, 'All moods & genres'));
+      moods.replaceChildren(...chips);
     } catch { moods.remove(); }
   })();
 

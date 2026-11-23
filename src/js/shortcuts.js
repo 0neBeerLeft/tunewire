@@ -37,7 +37,7 @@ function showShortcuts() {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openMenuEl) return closeMenu();
-    if (modalStack.length) return modalStack[modalStack.length - 1].close();
+    if (modalStack.length) { const top = modalStack[modalStack.length - 1]; return top.closable === false ? undefined : top.close(); }
     if (fsp.el) return closeFullscreen();
     if (selectedRows().length) return clearSelection();
     if (document.activeElement?.blur) document.activeElement.blur();

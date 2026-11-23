@@ -74,6 +74,7 @@ function askPrivacyFirstRun() {
   const cont = h('button', { class: 'btn primary countdown', onclick: async () => { if (cont.disabled) return; await updateSettings({ privacy_asked: true, error_reports: reports.checked }); m.close(); } }, 'Continue');
   const m = openModal({
     title: 'Before you start',
+    closable: false,
     subtitle: 'Tunewire keeps your music and listening on this computer. One question:',
     body: h('div', { class: 'privacy-list' },
       h('label', { class: 'setting' },

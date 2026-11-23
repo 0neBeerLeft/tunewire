@@ -389,11 +389,11 @@ function undoToast(message, undo) {
 }
 
 let modalStack = [];
-function openModal({ title, subtitle, body, footer, wide = false, onClose }) {
+function openModal({ title, subtitle, body, footer, wide = false, onClose, closable = true }) {
   const backdrop = h('div', { class: 'modal-backdrop' });
   const modal = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', style: wide ? 'width:min(720px,100%)' : null },
     h('header', {}, h('h2', {}, title), subtitle ? h('p', { class: 'muted' }, subtitle) : null,
-      h('button', { class: 'modal-close', title: 'Close', 'aria-label': 'Close', html: icon('x'), onclick: () => close() })),
+      closable ? h('button', { class: 'modal-close', title: 'Close', 'aria-label': 'Close', html: icon('x'), onclick: () => close() }) : null),
     h('div', { class: 'body' }, body),
     footer ? h('footer', {}, footer) : null);
   backdrop.append(modal);
@@ -402,9 +402,10 @@ function openModal({ title, subtitle, body, footer, wide = false, onClose }) {
     modalStack = modalStack.filter((m) => m.close !== close);
     onClose?.();
   };
-  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) close(); });
+  // closable: false (a question that needs an answer): only its own buttons close it.
+  backdrop.addEventListener('mousedown', (e) => { if (closable && e.target === backdrop) close(); });
   $('#modal-root').append(backdrop);
-  modalStack.push({ close, el: backdrop });
+  modalStack.push({ close, el: backdrop, closable });
   setTimeout(() => (modal.querySelector('[autofocus]') || modal.querySelector('input, button.primary'))?.focus(), 30);
   return { close, modal };
 }

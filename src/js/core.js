@@ -564,6 +564,8 @@ function showView(name, { push = true, reopen = null } = {}) {
   if (name === 'local') renderLocal();
   if (name === 'charts') renderCharts();
   if (name === 'discover') renderDiscover();
+  if (name === 'friends') renderFriends();
+  if (name === 'together') renderTogether();
   if (name === 'releases') renderReleases();
   if (name === 'home') renderHome();
   if (name === 'stats') renderStats();

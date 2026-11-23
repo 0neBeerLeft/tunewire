@@ -47,8 +47,28 @@ function glassTransparencyControl() {
   return h('div', { class: 'actions' }, range, label);
 }
 
+const GROUP_ICONS = { Account: 'user', Appearance: 'palette', Playback: 'play', Audio: 'sliders', Lyrics: 'mic', 'Downloads & local files': 'download', Scrobbling: 'pulse', Privacy: 'info', Backup: 'save', Tools: 'gear' };
+const groupId = (title) => `set-${title.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')}`;
+
 function group(title, brand, ...rows) {
-  return h('div', { class: `group ${brand || ''}` }, h('h2', { html: `${brand ? plogo(brand) : ''}<span>${esc(title)}</span>` }), ...rows);
+  const ico = brand ? plogo(brand) : icon(GROUP_ICONS[title] || 'sliders');
+  return h('section', { class: `group settings-card ${brand || ''}`, id: groupId(title), 'data-title': title },
+    h('h2', { html: `<span class="sc-ico">${ico}</span><span>${esc(title)}</span>` }), h('div', { class: 'sc-rows' }, ...rows));
+}
+
+/** Chips to jump between sections; the one in view is highlighted. */
+function settingsNav(body) {
+  const cards = $$('.settings-card', body);
+  const nav = h('nav', { class: 'settings-nav', 'aria-label': 'Settings sections' }, ...cards.map((c) => h('button', { 'data-for': c.id, onclick: () => c.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, c.dataset.title)));
+  const scroller = body.closest('.view');
+  const io = new IntersectionObserver((entries) => {
+    const top = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+    if (!top) return;
+    for (const b of nav.children) b.classList.toggle('on', b.dataset.for === top.target.id);
+    nav.querySelector('.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, { root: scroller, rootMargin: '-60px 0px -60% 0px' });
+  cards.forEach((c) => io.observe(c));
+  return nav;
 }
 
 let discordPoll = null;
@@ -170,6 +190,7 @@ function renderSettings() {
       settingRow('yt-dlp', `${esc($('#health').title || '')}<br><code>${esc(state.ytdlpPath || '')}</code>`, recheck(checkHealth)),
       settingRow('yt-dlp copy', 'Use the yt-dlp installed on your system, or let Tunewire keep its own up-to-date copy (official build from GitHub, checksum-verified).', ytdlpControl()),
       settingRow('Keyboard shortcuts', null, h('button', { class: 'btn small', onclick: showShortcuts }, 'Show'))));
+  body.prepend(settingsNav(body));
 }
 
 async function refreshTools() {

@@ -18,7 +18,7 @@ $('#search-browse').addEventListener('click', () => {
   showSearchBody(false);
   renderHero();
 });
-$('#nav-releases').addEventListener('click', () => showView('releases'));
+$('#nav-releases').addEventListener('click', () => (typeof signedIn === 'function' && signedIn() ? openNotifications() : showView('releases')));
 $('#nav-menu').addEventListener('click', (e) => openMenu(e.currentTarget, [
   { label: 'Settings', icon: 'gear', onClick: () => showView('settings') },
   { label: 'Themes', icon: 'palette', onClick: () => showView('themes') },

@@ -18,6 +18,8 @@ function parseLrc(text) {
 }
 
 function showPanel(name) {
+  // Friends and Listen together are pages now (sidebar); old callers land there.
+  if (name === 'friends' || name === 'together') { showView(name); return; }
   state.panel = name;
   for (const b of $$('.panel-tabs button')) {
     b.classList.toggle('active', b.dataset.panel === name);
@@ -29,10 +31,6 @@ function showPanel(name) {
   $('#lyrics-panel').hidden = name !== 'lyrics';
   $('#lyrics-actions').hidden = name !== 'lyrics';
   $('#np-panel').hidden = name !== 'now';
-  $('#friends-panel').hidden = name !== 'friends';
-  $('#together-panel').hidden = name !== 'together';
-  if (name === 'friends') renderFriends();
-  if (name === 'together') renderTogether();
   if (name === 'lyrics') loadLyrics();
   if (name === 'now') renderNowPlaying(true);
   syncPanelButtons();

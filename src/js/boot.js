@@ -128,7 +128,10 @@ async function boot() {
     // A tunewire:// link that started the app.
     invoke('plugin:deep-link|get_current').then((urls) => (urls || []).forEach(handleShareLink)).catch(() => {});
   });
-  try { showPanel(localStorage.getItem('tw-panel') || 'queue'); } catch { showPanel('queue'); }
+  try {
+    const saved = localStorage.getItem('tw-panel');
+    showPanel(['now', 'queue', 'lyrics'].includes(saved) ? saved : 'queue');
+  } catch { showPanel('queue'); }
   document.body.classList.toggle('show-sources', !!state.settings.show_sources);
 
   // Slower checks (they start processes or use the network) after first paint.

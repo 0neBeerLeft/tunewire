@@ -15,9 +15,11 @@
     <!-- Title bar: window drag area, navigation and search (the window has no system frame). -->
     <header class="titlebar" data-tauri-drag-region>
       <div class="tb-left" data-tauri-drag-region>
-        <span class="tb-brand" data-tauri-drag-region aria-label="Tunewire"><span class="tb-logo" aria-hidden="true"></span><span>tune<span class="tb-wire">wire</span></span></span>
-        <button class="tb-nav" id="nav-back" title="Go back"><i data-icon="chevLeft"></i></button>
-        <button class="tb-nav" id="nav-fwd" title="Go forward"><i data-icon="chevRight"></i></button>
+        <span class="tb-brand" data-tauri-drag-region aria-label="Tunewire"><span class="tb-logo" aria-hidden="true"></span><span class="tb-word">tune<span class="tb-wire">wire</span></span></span>
+        <div class="tb-navgroup">
+          <button class="tb-nav" id="nav-back" title="Go back"><i data-icon="chevLeft"></i></button>
+          <button class="tb-nav" id="nav-fwd" title="Go forward"><i data-icon="chevRight"></i></button>
+        </div>
       </div>
       <div class="tb-center" data-tauri-drag-region>
         <button class="tb-home" id="nav-home" title="Home"><i data-icon="home"></i></button>
@@ -33,9 +35,11 @@
       <div class="tb-right" data-tauri-drag-region>
         <button class="update-pill" id="update-pill" hidden><i data-icon="download"></i><span>Update ready</span><em>Restart</em></button>
         <div class="health-bad" id="health-bad" hidden></div>
-        <button class="tb-btn" id="nav-releases" title="New releases"><i data-icon="bell"></i><em class="nav-count new" id="rel-count"></em></button>
-        <button class="tb-btn" id="nav-menu" title="Settings and more"><i data-icon="gear"></i></button>
-        <button class="tb-btn tb-account" id="nav-account" title="Sign in" hidden><i data-icon="user"></i></button>
+        <div class="tb-cluster">
+          <button class="tb-btn" id="nav-releases" title="New releases"><i data-icon="bell"></i><em class="nav-count new" id="rel-count"></em><em class="nav-count new" id="notif-count" hidden></em></button>
+          <button class="tb-btn" id="nav-menu" title="Settings and more"><i data-icon="gear"></i></button>
+          <button class="tb-btn tb-account" id="nav-account" title="Sign in" hidden><i data-icon="user"></i></button>
+        </div>
         <div class="win-controls" id="win-controls">
           <button class="win-btn" id="win-min" title="Minimize"><i data-icon="winMin"></i></button>
           <button class="win-btn" id="win-max" title="Maximize"><i data-icon="winMax"></i></button>
@@ -54,6 +58,8 @@
         <button class="nav-item" data-view="discover" title="Discover"><i data-icon="browse"></i><span>Discover</span></button>
         <button class="nav-item" data-view="charts" title="Charts"><i data-icon="chart"></i><span>Charts</span></button>
         <button class="nav-item" data-view="releases" title="New releases"><i data-icon="sparkle"></i><span>New releases</span></button>
+        <button class="nav-item cloud-only" data-view="friends" title="Friends" hidden><i data-icon="friends"></i><span>Friends</span></button>
+        <button class="nav-item cloud-only" data-view="together" title="Listen together" hidden><i data-icon="headphones"></i><span>Listen together</span></button>
         <button class="nav-item" data-view="stats" title="Your stats"><i data-icon="pulse"></i><span>Your stats</span></button>
         <button class="nav-item" data-view="history" title="Recently played"><i data-icon="clock"></i><span>Recently played</span></button>
       </nav>
@@ -83,6 +89,14 @@
         <section class="view" id="view-favorites"><div id="fav-body"></div></section>
         <section class="view" id="view-mood"><div id="mood-body"></div></section>
         <section class="view" id="view-profile"><div id="profile-body"></div></section>
+        <section class="view social-view" id="view-friends">
+          <div class="page-head"><div><h1>Friends</h1><span class="meta">What your friends play, songs they send you, and this week's leaderboard</span></div></div>
+          <div class="side-panel social-page" id="friends-panel"></div>
+        </section>
+        <section class="view social-view" id="view-together">
+          <div class="page-head"><div><h1>Listen together</h1><span class="meta">Play in sync with friends: one host, everyone hears the same song</span></div></div>
+          <div class="side-panel social-page" id="together-panel"></div>
+        </section>
         <section class="view" id="view-search">
           <div id="search-home"></div>
           <div id="search-body" hidden>
@@ -201,8 +215,6 @@
           <button data-panel="now" role="tab" aria-controls="np-panel">Playing</button>
           <button class="active" data-panel="queue" role="tab" aria-controls="queue-list">Queue <span class="meta" id="queue-count"></span></button>
           <button data-panel="lyrics" role="tab" aria-controls="lyrics-panel">Lyrics</button>
-          <button data-panel="friends" role="tab" aria-controls="friends-panel" class="cloud-only" hidden>Friends</button>
-          <button data-panel="together" role="tab" aria-controls="together-panel" class="cloud-only" hidden>Together</button>
         </div>
         <div class="actions" id="lyrics-actions" hidden>
           <button class="icon-btn" id="lyrics-full" title="Full screen lyrics"><i data-icon="expand"></i></button>
@@ -216,8 +228,6 @@
       <div class="np-panel" id="np-panel" role="tabpanel" hidden></div>
       <div class="queue-list" id="queue-list" role="tabpanel"></div>
       <div class="lyrics" id="lyrics-panel" role="tabpanel" hidden></div>
-      <div class="side-panel" id="friends-panel" role="tabpanel" hidden></div>
-      <div class="side-panel" id="together-panel" role="tabpanel" hidden></div>
     </aside>
 
     <footer class="player-bar" id="player-bar">

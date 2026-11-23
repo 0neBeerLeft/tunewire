@@ -23,9 +23,17 @@ function paintAccountButton() {
   if (!b) return;
   b.hidden = !cloudOn();
   b.replaceChildren(signedIn() ? avatarEl(cloud.session.avatar, cloud.session.name, 'avatar tb-avatar') : h('span', { html: icon('user') }));
-  if (notif.unread) b.append(h('em', { class: 'nav-count new', 'aria-hidden': 'true' }, String(Math.min(99, notif.unread))));
-  b.title = signedIn() ? `${cloud.session.name}${notif.unread ? ` · ${notif.unread} new` : ''}` : 'Sign in';
+  b.title = signedIn() ? `${cloud.session.name} · account` : 'Sign in';
   b.setAttribute('aria-label', b.title);
+  // The bell: notifications while signed in, new releases otherwise.
+  const bell = $('#nav-releases');
+  const count = $('#notif-count');
+  const on = signedIn();
+  bell.classList.toggle('notif-mode', on);
+  count.hidden = !(on && notif.unread);
+  count.textContent = notif.unread ? String(Math.min(99, notif.unread)) : '';
+  bell.title = on ? (notif.unread ? `Notifications · ${notif.unread} new` : 'Notifications') : 'New releases';
+  bell.setAttribute('aria-label', bell.title);
 }
 onCloudChange(paintAccountButton);
 onCloudChange(() => {
@@ -42,8 +50,8 @@ $('#nav-account')?.addEventListener('click', (e) => {
     { label: cloud.session.name, heading: true },
     { label: notif.unread ? `Notifications (${notif.unread})` : 'Notifications', icon: 'bell', onClick: () => openNotifications() },
     { label: 'Your profile', icon: 'user', onClick: () => openProfile(cloud.session.user_id) },
-    { label: 'Friends', icon: 'friends', onClick: () => { setPanelOpen(true); showPanel('friends'); } },
-    { label: 'Listen together', icon: 'friends', onClick: () => startJam() },
+    { label: 'Friends', icon: 'friends', onClick: () => showView('friends') },
+    { label: 'Listen together', icon: 'headphones', onClick: () => showView('together') },
     'sep',
     { label: 'Sign out', icon: 'x', onClick: () => signOut() },
   ]);
@@ -63,6 +71,7 @@ async function signOut() {
 function askPrivacyFirstRun() {
   if (!state.settings || state.settings.privacy_asked) return;
   const reports = h('input', { type: 'checkbox', checked: false });
+  const cont = h('button', { class: 'btn primary countdown', onclick: async () => { if (cont.disabled) return; await updateSettings({ privacy_asked: true, error_reports: reports.checked }); m.close(); } }, 'Continue');
   const m = openModal({
     title: 'Before you start',
     subtitle: 'Tunewire keeps your music and listening on this computer. One question:',
@@ -70,9 +79,14 @@ function askPrivacyFirstRun() {
       h('label', { class: 'setting' },
         h('div', { class: 'label' }, 'Send error reports', h('small', {}, 'When something breaks, send the developer the app version, operating system and the error, with your folder names and links removed. Nothing about your music is sent.')),
         h('span', { class: 'switch' }, reports, h('span')))),
-    footer: [h('button', { class: 'btn primary', onclick: async () => { await updateSettings({ privacy_asked: true, error_reports: reports.checked }); m.close(); } }, 'Continue')],
-    onClose: () => { if (!state.settings.privacy_asked) updateSettings({ privacy_asked: true, error_reports: false }); },
+    footer: [cont],
+    onClose: () => { clearInterval(timer); if (!state.settings.privacy_asked) updateSettings({ privacy_asked: true, error_reports: false }); },
   });
+  // Continue unlocks after a short countdown, so the question actually gets read.
+  let left = 10;
+  const paint = () => { cont.disabled = left > 0; cont.textContent = left > 0 ? `Continue (${left})` : 'Continue'; };
+  paint();
+  const timer = setInterval(() => { left--; paint(); if (left <= 0) clearInterval(timer); }, 1000);
 }
 
 /** After signing in (once): what friends may see. Everything starts private. */
@@ -798,7 +812,8 @@ const QUALITY = {
 
 function renderTogether() {
   const box = $('#together-panel');
-  if (!box || box.hidden) return;
+  // Only while its page is the one on screen.
+  if (!box || !box.closest('.view')?.classList.contains('active')) return;
   if (!jam.code) {
     box.replaceChildren(h('div', { class: 'empty' },
       h('p', {}, 'Listen together'),
@@ -887,7 +902,8 @@ async function answerRequest(uid, accept) {
 
 async function renderFriends() {
   const box = $('#friends-panel');
-  if (!box || box.hidden) return;
+  // Only while its page is the one on screen.
+  if (!box || !box.closest('.view')?.classList.contains('active')) return;
   clearInterval(friends.liveTimer);
   if (!cloudOn()) { box.replaceChildren(h('div', { class: 'empty' }, h('p', {}, 'Not available in this build.'))); return; }
   if (!signedIn()) {

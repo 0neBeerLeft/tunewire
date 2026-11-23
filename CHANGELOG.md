@@ -23,6 +23,11 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Stats: a proper listening-time chart (scale, empty days as dots, hover values) and a tidier layout
 - Even spacing around the panels, the player bar and on playlist pages
 
+- Friends and Listen together are pages in the sidebar (no longer tabs in the side panel)
+- The bell is your notifications; bell, settings and account sit together in one bar; a new logo lockup
+- Settings: each section is a card, with a bar to jump between them
+- Dialogs are solid and easy to read; the first-start question gives you time to read it
+
 **And more**
 - Stars and Snow backgrounds redrawn: depth, twinkling and shooting stars, soft drifting snow; visible under the whole app, and lighter on the GPU
 - The player bar is a floating glass dock

@@ -2157,6 +2157,7 @@ button:not(:disabled):hover, button:active { transform: none !important; }
 .suggest {
   max-height: min(68vh, 520px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border-radius: 18px;
   background: linear-gradient(145deg, color-mix(in srgb, var(--text) 8%, var(--glass)), var(--glass)) !important;
@@ -2178,3 +2179,4 @@ button:not(:disabled):hover, button:active { transform: none !important; }
 .suggest-sep { margin: 7px 10px; background: color-mix(in srgb, var(--text) 12%, transparent); }
 .suggest-item .s-play { width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb, var(--text) 12%, transparent); }
 .suggest-item:hover .s-play, .suggest-item.active .s-play { color: var(--text); background: color-mix(in srgb, var(--text) 18%, transparent); }
+.titlebar .suggest { top: calc(100% + 8px); left: 0; right: 0; max-height: min(64vh, 480px); border-radius: 18px; }

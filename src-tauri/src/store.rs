@@ -25,7 +25,7 @@ use crate::models::{Platform, Track};
 pub const HISTORY_MAX: usize = 5000;
 
 /// Tunewire's Discord application (Rich Presence shows its name and icon).
-pub const DISCORD_APP_ID: &str = "1560825729984503888";
+pub const DISCORD_APP_ID: &str = "1574530127981707264";
 
 pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)

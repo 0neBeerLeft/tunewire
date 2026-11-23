@@ -148,7 +148,10 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Never restore the window frame from saved state: a state file from a
+        // build with the native frame brought back Windows' own title bar on
+        // top of ours (a double title bar).
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::DECORATIONS).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -291,6 +294,10 @@ pub fn run() {
                     std::future::poll_fn(|cx| if term.poll_recv(cx).is_ready() || int.poll_recv(cx).is_ready() { std::task::Poll::Ready(()) } else { std::task::Poll::Pending }).await;
                     h.exit(0);
                 });
+            }
+            // The app draws its own title bar; make sure Windows doesn't add one.
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_decorations(false);
             }
             media::init(app);
             media::update(app.handle(), &app.state::<AppState>().playback_state());

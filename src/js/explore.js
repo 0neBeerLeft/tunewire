@@ -291,21 +291,29 @@ function accentVars(hex) {
  * gets a faint tint, and the accent is a readable version of it. Lightness
  * stays where the theme has it (dark or light), so text keeps its contrast.
  */
-function paletteVars(hex, surfaces) {
-  const [hh, s0] = hexToHsl(hex);
-  const v = accentVars(hex);
-  const vars = { '--accent': v.accent, '--accent-soft': v.soft, '--accent-contrast': v.contrast, '--warn': v.accent };
+function paletteVars(hex, surfaces, tone = hex) {
+  // Surfaces follow `tone` (the average of the picture you see behind the
+  // panels); the accent follows `hex` (its most colorful part; null for a
+  // black-and-white picture: the theme's accent stays).
+  const [hh, s0] = hexToHsl(tone || hex);
+  const vars = {};
+  if (hex) {
+    const v = accentVars(hex);
+    Object.assign(vars, { '--accent': v.accent, '--accent-soft': v.soft, '--accent-contrast': v.contrast, '--warn': v.accent });
+  }
   if (surfaces) {
     const light = document.documentElement.dataset.mode === 'light';
     // Muted: enough to belong with the picture, not enough to shout.
     const t = Math.min(0.6, s0) * (light ? 0.55 : 0.78);
+    const k = Math.min(1, s0 * 4);
     const L = light
       ? { bg: 0.955, elev: 0.985, elev2: 0.925, hover: 0.94, sel: 0.89, border: 0.86, text: 0.12, dim: 0.38, faint: 0.56 }
       : { bg: 0.07, elev: 0.1, elev2: 0.14, hover: 0.13, sel: 0.19, border: 0.17, text: 0.93, dim: 0.7, faint: 0.47 };
     Object.assign(vars, {
       '--bg': hsl(hh, t, L.bg), '--bg-elev': hsl(hh, t, L.elev), '--bg-elev-2': hsl(hh, t, L.elev2),
       '--surface-hover': hsl(hh, t, L.hover), '--selected': hsl(hh, t * 1.1, L.sel), '--border': hsl(hh, t, L.border),
-      '--text': hsl(hh, light ? 0.25 : 0.14, L.text), '--text-dim': hsl(hh, light ? 0.18 : 0.11, L.dim), '--text-faint': hsl(hh, 0.1, L.faint),
+      // Text tint only as strong as the picture is colorful (grey stays grey).
+      '--text': hsl(hh, (light ? 0.25 : 0.14) * k, L.text), '--text-dim': hsl(hh, (light ? 0.18 : 0.11) * k, L.dim), '--text-faint': hsl(hh, 0.1 * k, L.faint),
       '--panel-border': hsl(hh, t * 1.2, light ? 0.82 : 0.2, 0.7),
     });
   }
@@ -333,13 +341,18 @@ async function updateAppColors() {
   const mode = s.background || 'art';
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
-  let source, get;
+  let source, getAccent, getTone;
   if (mode === 'image' && s.background_image) {
-    source = `image:${s.background_image}`;
-    get = () => call('background_image_color', { path: s.background_image });
+    const path = s.background_image;
+    source = `image:${path}`;
+    getAccent = () => call('background_image_color', { path });
+    getTone = async () => averageColor(ambient.imgPath === path && ambient.imgData ? ambient.imgData : await call('background_image_data', { path }));
   } else if (thumb) {
+    const url = imgUrl(thumb, 120);
     source = `cover:${thumb}`;
-    get = () => call('cover_color', { url: imgUrl(thumb, 120) });
+    getAccent = () => call('cover_color', { url });
+    // Art background: the blurred cover itself. Tint: pools of its color.
+    getTone = mode === 'art' ? async () => averageColor(await call('cover_wash', { url })) : null;
   } else {
     return clearCoverAccent();
   }
@@ -347,10 +360,31 @@ async function updateAppColors() {
   if (key === appColors.key) return;
   appColors.key = key;
   const seq = ++appColors.seq;
-  const color = await get().catch(() => null);
+  const [accent, tone] = await Promise.all([getAccent().catch(() => null), getTone ? getTone().catch(() => null) : null]);
   if (seq !== appColors.seq) return;
-  // Greyscale pictures (no color found): the theme's own colors.
-  $('#accent-css').textContent = color ? paletteVars(color, mode !== 'plain') : '';
+  if (!accent && !tone) { $('#accent-css').textContent = ''; return; }
+  $('#accent-css').textContent = paletteVars(accent, mode !== 'plain', tone);
+}
+
+/** Average color of an image (a data: URL), as #rrggbb. */
+async function averageColor(src) {
+  if (!src) return null;
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, 16, 16);
+  const d = ctx.getImageData(0, 0, 16, 16).data;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+  }
+  if (!n) return null;
+  const hex = (v) => Math.round(v / n).toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
 /** Kept for callers from before the whole app was colored. */

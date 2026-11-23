@@ -1770,14 +1770,22 @@ body.dragging-tracks .track:hover { background: transparent; }
 :root { transition: --bg 1.2s ease, --bg-elev 1.2s ease, --bg-elev-2 1.2s ease, --surface-hover 1.2s ease, --selected 1.2s ease, --border 1.2s ease, --text 1.2s ease, --text-dim 1.2s ease, --text-faint 1.2s ease, --accent 1.2s ease; }
 @media (prefers-reduced-motion: reduce) { :root { transition: none; } }
 
-/* Dialogs, menus and suggestions carry the background's color too: a glow of
-   the accent at the top, a tinted edge, and a backdrop of the app's own
-   color instead of plain black. */
+/* See-through: the background (blurred cover or your picture) shows through
+   the panels, and dialogs, menus and suggestions are frosted glass over
+   whatever is behind them. The background is already a pre-blurred picture,
+   so panels need no live blur of their own (cheap); the floating layers do,
+   since they sit over sharp content. */
+:root { --panel: color-mix(in srgb, var(--bg-elev) 52%, transparent); --glass: color-mix(in srgb, var(--panel-solid) 66%, transparent); }
+:root[data-mode="light"] { --panel: color-mix(in srgb, var(--bg-elev) 62%, transparent); --glass: color-mix(in srgb, var(--panel-solid) 72%, transparent); }
 .modal, .menu, .suggest {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 13%, var(--panel-solid)), var(--panel-solid) 160px) !important;
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border)) !important;
-  box-shadow: 0 24px 60px color-mix(in srgb, var(--bg) 70%, #000), 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--glass)), var(--glass) 160px) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.4); backdrop-filter: blur(28px) saturate(1.4);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45), inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent);
 }
-.menu { background: color-mix(in srgb, var(--accent) 9%, var(--panel-solid)) !important; }
-.modal-backdrop { background: color-mix(in srgb, var(--bg) 62%, transparent); backdrop-filter: blur(6px) saturate(1.2); -webkit-backdrop-filter: blur(6px) saturate(1.2); }
-.modal footer .btn.primary, .modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+.menu { background: var(--glass) !important; }
+.modal-backdrop { background: color-mix(in srgb, var(--bg) 35%, transparent); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+/* The backdrop already blurs the app behind a dialog, so the dialog needs
+   no blur of its own (one live blur, not two); a little more body instead. */
+.modal { -webkit-backdrop-filter: none; backdrop-filter: none; --glass: color-mix(in srgb, var(--panel-solid) 80%, transparent); }
+.modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }

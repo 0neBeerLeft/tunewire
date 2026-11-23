@@ -7,7 +7,8 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 **The whole app matches the background**
 - Panels, menus, text and highlights take their colors from the background: the playing song's cover, or your own picture, fading from song to song. Settings → Appearance → Colors from the background
-- Dialogs and menus carry the color too, over a tinted, blurred backdrop
+- See-through panels: the background shows through the whole app, and the panels take the colors you actually see behind them (a black-and-white cover gives a grey app, a colorful one a colorful app)
+- Dialogs and menus are frosted glass over a blurred backdrop
 
 **New logo**
 - A new app icon and logo: one wire drawn as sound waves. The logo in the title bar is sharp at any size and takes the app's colors

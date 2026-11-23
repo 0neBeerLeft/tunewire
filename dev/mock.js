@@ -268,7 +268,7 @@
     load_sync_state: () => sessionStorage.getItem('tw-sync') || '',
     save_sync_state: ({ data }) => { sessionStorage.setItem('tw-sync', data); },
     spotify_profile_playlists: () => ({ name: 'Friend', playlists: [{ id: 'fp1', name: 'Friend mix', owner: 'Friend', total: 2, thumbnail: null }] }),
-    report_error: () => null, reports_available: () => false, cover_wash: () => (DEMO ? null : 'data:image/png;base64,iVBORw0KGgo='),
+    report_error: () => null, reports_available: () => false, cover_wash: () => window.__wash || (DEMO ? null : 'data:image/png;base64,iVBORw0KGgo='),
     import_apple_music: () => { const p = { id: `pam${Date.now()}`, name: 'Apple Mix', tracks: tracks.slice(1, 4), created: Date.now(), updated: Date.now(), added: {} }; playlists.push(p); emit('library-changed', 'playlists'); return { playlist: p, missing: 1 }; },
     import_rows: ({ name, rows }) => { const p = { id: `pcsv${Date.now()}`, name, tracks: tracks.slice(0, Math.min(rows.length, 5)), created: Date.now(), updated: Date.now(), added: {} }; playlists.push(p); emit('library-changed', 'playlists'); return { playlist: p, missing: 0 }; },
     apply_matches: ({ tracks: ts }) => ts,

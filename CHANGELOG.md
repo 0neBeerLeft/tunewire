@@ -3,7 +3,23 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## v2.2.1
+## Unreleased
+
+**New design**
+- A black-and-white glass look, with adjustable glass transparency and a Daily Mix banner on Home
+- Colors from the cover is now an option you turn on (Settings → Appearance); the app starts black and white
+- A black-and-white logo and app icon to match
+
+**Equalizer**
+- A new parametric-style equalizer: drag colored bands on a graph of the real curve; double-click resets a band, scroll fine-tunes
+- While a song plays, its sound moves behind the curve
+
+**And more**
+- Stars and Snow backgrounds redrawn: depth, twinkling and shooting stars, soft drifting snow; visible under the whole app, and lighter on the GPU
+- The player bar is a floating glass dock
+- The plugins page shows each plugin as a proper card with its settings
+- At least three Daily Mixes, even when the artists you play are all close to each other
+
 
 **The whole app matches the background**
 - Panels, menus, text and highlights take their colors from the background: the playing song's cover, or your own picture, fading from song to song. Settings → Appearance → Colors from the background

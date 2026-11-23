@@ -15,6 +15,19 @@ pub fn report_error(kind: String, message: String, details: Option<String>) {
     crate::report::report(&kind.chars().take(20).collect::<String>(), &message.chars().take(2000).collect::<String>(), &details.unwrap_or_default().chars().take(3000).collect::<String>());
 }
 
+/// Turn the live spectrum (equalizer display) on while it's on screen.
+#[tauri::command]
+pub fn analyzer_enable(on: bool) {
+    crate::analyzer::set_enabled(on);
+}
+
+/// Current spectrum of what's playing: `bands` levels in dBFS from 20 Hz to
+/// 20 kHz (log spaced), or empty when nothing is playing.
+#[tauri::command]
+pub fn audio_spectrum(bands: Option<usize>) -> Vec<f32> {
+    crate::analyzer::spectrum(bands.unwrap_or(96).clamp(8, 256))
+}
+
 /// Whether error reports can be sent (the online backend is built in).
 #[tauri::command]
 pub fn reports_available() -> bool {

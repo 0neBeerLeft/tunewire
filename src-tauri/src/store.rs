@@ -78,8 +78,11 @@ pub struct Settings {
     pub eq_gains: Vec<f32>,
     /// cpal device id ("" = system default).
     pub output_device: String,
-    /// Tint the accent color from the playing song's cover.
+    /// Legacy (before the black-and-white design, defaulted on): no longer read.
     pub cover_accent: bool,
+    /// Tint the app from the playing song's cover. A new key so everyone
+    /// starts with the black-and-white design, whatever cover_accent was.
+    pub cover_colors: bool,
     /// ISO country code for Charts ("ZZ" = global).
     pub charts_country: String,
     /// Recent searches, newest first.
@@ -160,6 +163,7 @@ impl Default for Settings {
             eq_gains: vec![0.0; 10],
             output_device: String::new(),
             cover_accent: false,
+            cover_colors: false,
             charts_country: "ZZ".into(),
             search_history: Vec::new(),
             background: "art".into(),

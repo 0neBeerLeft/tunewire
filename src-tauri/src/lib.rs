@@ -18,6 +18,7 @@
 //!   themes, plugins, discord
 
 use crate::sync_ext::LockExt;
+mod analyzer;
 mod artist;
 mod audio;
 mod backup;
@@ -342,6 +343,8 @@ pub fn run() {
             commands::browse::ytm_collection,
             commands::browse::ytm_moods,
             commands::discovery::discover_taste,
+            commands::system::analyzer_enable,
+            commands::system::audio_spectrum,
             commands::discovery::discover_picks,
             commands::discovery::discover_fresh,
             commands::discovery::discover_new_releases,

@@ -20,6 +20,9 @@ use crate::store::now_ms;
 
 const DAY_MS: u64 = 86_400_000;
 const MAX_DAILY: usize = 6;
+/// Always aim for at least this many Daily Mixes (when there's enough to
+/// build them from): a close-knit taste otherwise gets just one.
+const MIN_DAILY: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mix {
@@ -215,53 +218,65 @@ async fn build_daily(t: &Taste, cache: &Arc<SearchCache>, day: &str) -> Vec<Mix>
     let mut mixes: Vec<Mix> = Vec::new();
     let mut covered: HashSet<String> = HashSet::new();
     let mut used: HashSet<String> = HashSet::new();
-    for (artist, (_, own)) in &anchors {
-        if mixes.len() >= MAX_DAILY || covered.contains(artist) {
-            continue;
+    let mut anchored: HashSet<String> = HashSet::new();
+    // First pass: one mix per distinct corner of your taste (an artist in an
+    // earlier mix's circle doesn't anchor another). Second pass, only when
+    // that made fewer than MIN_DAILY: a close-knit taste (everyone in each
+    // other's circle) still gets more mixes, anchored on your next top
+    // artists, with no song repeated between mixes.
+    for relaxed in [false, true] {
+        if relaxed && mixes.len() >= MIN_DAILY {
+            break;
         }
-        let Some(recs) = results.get(artist) else {
-            continue;
-        };
-        // The anchor plus the artists closest to it (the top of its radio).
-        let mix_artists: HashSet<String> = recs.iter().take(15).map(|r| primary_artist(&r.artist)).chain([artist.clone()]).collect();
-        // Familiar: your own songs from the anchor and artists in its orbit.
-        let mut familiar: Vec<(Track, f64)> = t.tracks.iter().filter(|(tr, _)| mix_artists.contains(&primary_artist(&tr.artist)) && !used.contains(&tr.key)).cloned().collect();
-        familiar.sort_by(|a, b| b.1.total_cmp(&a.1));
-        let mut familiar: Vec<Track> = familiar.into_iter().take(12).map(|(t, _)| t).collect();
-        if familiar.is_empty() {
-            familiar = own.iter().take(3).map(|(t, _)| t.clone()).collect();
-        }
-        let fresh: Vec<Track> = recs.iter().filter(|r| !t.known.contains(&r.key) && !used.contains(&r.key)).take(20).cloned().collect();
-        if fresh.len() < 8 {
-            continue;
-        }
-        day_shuffle(&mut familiar, nonce ^ seed_of(artist));
-        // Two new songs, then one you know.
-        let mut tracks = Vec::new();
-        let (mut f, mut n) = (familiar.into_iter(), fresh.into_iter());
-        loop {
-            let a = n.next();
-            let b = n.next();
-            let c = f.next();
-            if a.is_none() && c.is_none() {
-                break;
+        for (artist, (_, own)) in &anchors {
+            if mixes.len() >= MAX_DAILY || anchored.contains(artist) || (!relaxed && covered.contains(artist)) {
+                continue;
             }
-            tracks.extend([c, a, b].into_iter().flatten());
+            let Some(recs) = results.get(artist) else {
+                continue;
+            };
+            // The anchor plus the artists closest to it (the top of its radio).
+            let mix_artists: HashSet<String> = recs.iter().take(15).map(|r| primary_artist(&r.artist)).chain([artist.clone()]).collect();
+            // Familiar: your own songs from the anchor and artists in its orbit.
+            let mut familiar: Vec<(Track, f64)> = t.tracks.iter().filter(|(tr, _)| mix_artists.contains(&primary_artist(&tr.artist)) && !used.contains(&tr.key)).cloned().collect();
+            familiar.sort_by(|a, b| b.1.total_cmp(&a.1));
+            let mut familiar: Vec<Track> = familiar.into_iter().take(12).map(|(t, _)| t).collect();
+            if familiar.is_empty() {
+                familiar = own.iter().take(3).map(|(t, _)| t.clone()).collect();
+            }
+            let fresh: Vec<Track> = recs.iter().filter(|r| !t.known.contains(&r.key) && !used.contains(&r.key)).take(20).cloned().collect();
+            if fresh.len() < if relaxed { 6 } else { 8 } {
+                continue;
+            }
+            day_shuffle(&mut familiar, nonce ^ seed_of(artist));
+            // Two new songs, then one you know.
+            let mut tracks = Vec::new();
+            let (mut f, mut n) = (familiar.into_iter(), fresh.into_iter());
+            loop {
+                let a = n.next();
+                let b = n.next();
+                let c = f.next();
+                if a.is_none() && c.is_none() {
+                    break;
+                }
+                tracks.extend([c, a, b].into_iter().flatten());
+            }
+            tracks.truncate(30);
+            used.extend(tracks.iter().map(|t| t.key.clone()));
+            // Artists this mix already covers don't get a mix of their own.
+            covered.extend(mix_artists.iter().filter(|a| *a != artist).cloned());
+            covered.insert(artist.clone());
+            anchored.insert(artist.clone());
+            let i = mixes.len() + 1;
+            let anchor_cover = own.first().and_then(|(t, _)| t.thumbnail.clone());
+            let mut cv = covers(&tracks);
+            if let Some(c) = anchor_cover {
+                cv.retain(|x| *x != c);
+                cv.insert(0, c);
+                cv.truncate(4);
+            }
+            mixes.push(Mix { id: format!("daily-{i}"), kind: "daily".into(), title: format!("Daily Mix {i}"), subtitle: artist_list(&tracks, artist), covers: cv, tracks });
         }
-        tracks.truncate(30);
-        used.extend(tracks.iter().map(|t| t.key.clone()));
-        // Artists this mix already covers don't get a mix of their own.
-        covered.extend(mix_artists.iter().filter(|a| *a != artist).cloned());
-        covered.insert(artist.clone());
-        let i = mixes.len() + 1;
-        let anchor_cover = own.first().and_then(|(t, _)| t.thumbnail.clone());
-        let mut cv = covers(&tracks);
-        if let Some(c) = anchor_cover {
-            cv.retain(|x| *x != c);
-            cv.insert(0, c);
-            cv.truncate(4);
-        }
-        mixes.push(Mix { id: format!("daily-{i}"), kind: "daily".into(), title: format!("Daily Mix {i}"), subtitle: artist_list(&tracks, artist), covers: cv, tracks });
     }
     mixes
 }

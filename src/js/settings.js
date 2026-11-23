@@ -17,7 +17,7 @@ function settingToggle(label, help, key) {
     await updateSettings(key === 'error_reports' ? { error_reports: input.checked, privacy_asked: true } : { [key]: input.checked });
     if (key === 'discord_rpc') toast(input.checked ? 'Discord Rich Presence on' : 'Discord Rich Presence off', 'ok', 1800);
     if (key === 'show_sources') document.body.classList.toggle('show-sources', input.checked);
-    if (key === 'cover_accent') {
+    if (key === 'cover_colors') {
       if (input.checked) updateAppColors();
       else clearCoverAccent();
     }
@@ -130,7 +130,7 @@ function renderSettings() {
       settingRow('Background', 'Choose the playing cover or a simple pixel-art animation.', backgroundControl()),
       settingRow('Background strength', null, strengthControl()),
       settingRow('Glass transparency', 'Choose how much of the background shows through the panels.', glassTransparencyControl()),
-      settingToggle('Colors from the cover', 'Tint the app from the playing song’s cover. Off: keep the black-and-white palette.', 'cover_accent'),
+      settingToggle('Colors from the cover', 'Tint the app from the playing song’s cover. Off: keep the black-and-white palette.', 'cover_colors'),
       settingToggle('Show source icons on songs', 'Always show the YouTube Music / SoundCloud / YouTube / Spotify icons on song rows (otherwise only when you hover a song).', 'show_sources')),
     group('Playback', null,
       settingRow('Source priority', 'When a song exists on several platforms, the first available one plays. If it fails, the next one is tried.', order),
@@ -249,43 +249,21 @@ const EQ_PRESETS = {
 
 function eqSetting() {
   const s = state.settings;
-  const gains = [...(s.eq_gains || EQ_PRESETS.Flat)];
+  const gains = [...(s.eq_gains || EQ_PRESETS.Flat)].map(Number);
   const presetName = () => Object.keys(EQ_PRESETS).find((k) => EQ_PRESETS[k].every((g, i) => g === gains[i])) || 'Custom';
-  const preset = h('select', {});
+  const preset = h('select', { 'aria-label': 'Equalizer preset' });
   const fillPresets = () => {
     const cur = presetName();
     preset.replaceChildren(...Object.keys(EQ_PRESETS).map((k) => h('option', { value: k, selected: k === cur }, k)),
       ...(cur === 'Custom' ? [h('option', { value: 'Custom', selected: true }, 'Custom')] : []));
   };
-  const save = throttle(() => updateSettings({ eq_gains: gains }), 150);
-  const setSliderFill = (slider, value) => {
-    const pct = ((value + 12) / 24) * 100;
-    slider.style.setProperty('--eq-start', `${value < 0 ? pct : 50}%`);
-    slider.style.setProperty('--eq-end', `${value < 0 ? 50 : pct}%`);
-  };
-  const sliders = gains.map((g, i) => {
-    const val = h('span', { class: 'eq-val' }, `${g > 0 ? '+' : ''}${g}`);
-    const r = h('input', { type: 'range', min: -12, max: 12, step: 1, value: g, class: 'eq-slider', 'aria-label': `${EQ_BANDS[i]} Hz` });
-    setSliderFill(r, g);
-    r.addEventListener('input', () => {
-      gains[i] = Number(r.value);
-      val.textContent = `${gains[i] > 0 ? '+' : ''}${gains[i]}`;
-      setSliderFill(r, gains[i]);
-      fillPresets();
-      save();
-    });
-    r.addEventListener('dblclick', () => { r.value = 0; r.dispatchEvent(new Event('input')); });
-    return h('div', { class: 'eq-band' }, val, r, h('span', { class: 'eq-hz' }, EQ_BANDS[i]));
-  });
+  const save = throttle(() => updateSettings({ eq_gains: gains }), 120);
+  const enabled = h('input', { type: 'checkbox', checked: !!s.eq_enabled, 'aria-label': 'Enable equalizer' });
+  const graph = eqGraph(gains, () => { fillPresets(); save(); }, () => enabled.checked);
   const applyPreset = (values) => {
-    values.forEach((g, i) => {
-      gains[i] = g;
-      const slider = sliders[i].querySelector('input');
-      slider.value = g;
-      setSliderFill(slider, g);
-      sliders[i].querySelector('.eq-val').textContent = `${g > 0 ? '+' : ''}${g}`;
-    });
+    values.forEach((g, i) => { gains[i] = g; });
     fillPresets();
+    graph.refresh();
     updateSettings({ eq_gains: gains });
   };
   preset.addEventListener('change', () => {
@@ -294,19 +272,248 @@ function eqSetting() {
   });
   const reset = h('button', { class: 'btn small', onclick: () => applyPreset(EQ_PRESETS.Flat) }, 'Reset');
   fillPresets();
-  const enabled = h('input', { type: 'checkbox', checked: !!s.eq_enabled, 'aria-label': 'Enable equalizer' });
   const status = h('span', { class: `eq-status${s.eq_enabled ? ' on' : ''}` }, s.eq_enabled ? 'On' : 'Off');
-  const panel = h('div', { class: `eq-panel${s.eq_enabled ? '' : ' off'}` }, ...sliders);
+  graph.el.classList.toggle('off', !s.eq_enabled);
   enabled.addEventListener('change', () => {
-    panel.classList.toggle('off', !enabled.checked);
+    graph.el.classList.toggle('off', !enabled.checked);
     status.classList.toggle('on', enabled.checked);
     status.textContent = enabled.checked ? 'On' : 'Off';
+    graph.refresh();
     updateSettings({ eq_enabled: enabled.checked });
   });
   return h('div', { class: 'setting eq-setting' },
-    h('div', { class: 'label' }, 'Equalizer', h('small', {}, 'Shape ten frequency bands. Double-click a slider to reset that band.')),
+    h('div', { class: 'label' }, 'Equalizer', h('small', {}, 'Drag a band up or down. Double-click to reset it, scroll to fine-tune, or select the graph and use the arrow keys. While a song plays, its sound moves behind the curve.')),
     h('div', { class: 'actions eq-actions' }, preset, reset, status, h('label', { class: 'switch' }, enabled, h('span'))),
-    panel);
+    graph.el);
+}
+
+// Parametric-EQ style graph: the EQ's real response (same filters as the
+// audio engine, eq.rs), a draggable node per band, and the live spectrum of
+// the playing song behind it.
+const EQ_HZ = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const EQ_RANGE = 12; // dB above/below 0 (the bands' limit)
+
+/** Magnitude response (dB) of band `i` at gain `gain` for frequency `f` (RBJ biquads, as in eq.rs). */
+function eqBandDb(i, gain, f, rate = 48000) {
+  if (Math.abs(gain) < 0.05) return 0;
+  const A = 10 ** (gain / 40), w0 = 2 * Math.PI * EQ_HZ[i] / rate, cos = Math.cos(w0), sin = Math.sin(w0);
+  let b0, b1, b2, a0, a1, a2;
+  if (i === 0 || i === 9) {
+    const alpha = sin / 2 * Math.SQRT2, k = 2 * Math.sqrt(A) * alpha;
+    if (i === 0) {
+      [b0, b1, b2] = [A * ((A + 1) - (A - 1) * cos + k), 2 * A * ((A - 1) - (A + 1) * cos), A * ((A + 1) - (A - 1) * cos - k)];
+      [a0, a1, a2] = [(A + 1) + (A - 1) * cos + k, -2 * ((A - 1) + (A + 1) * cos), (A + 1) + (A - 1) * cos - k];
+    } else {
+      [b0, b1, b2] = [A * ((A + 1) + (A - 1) * cos + k), -2 * A * ((A - 1) + (A + 1) * cos), A * ((A + 1) + (A - 1) * cos - k)];
+      [a0, a1, a2] = [(A + 1) - (A - 1) * cos + k, 2 * ((A - 1) - (A + 1) * cos), (A + 1) - (A - 1) * cos - k];
+    }
+  } else {
+    const alpha = sin / (2 * 1.41);
+    [b0, b1, b2, a0, a1, a2] = [1 + alpha * A, -2 * cos, 1 - alpha * A, 1 + alpha / A, -2 * cos, 1 - alpha / A];
+  }
+  const w = 2 * Math.PI * f / rate;
+  const c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+  const nr = b0 + b1 * c1 + b2 * c2, ni = -(b1 * s1 + b2 * s2);
+  const dr = a0 + a1 * c1 + a2 * c2, di = -(a1 * s1 + a2 * s2);
+  return 10 * Math.log10((nr * nr + ni * ni) / (dr * dr + di * di));
+}
+
+/** FL-style band colors, red through violet. */
+function eqColor(i) {
+  return `hsl(${Math.round(i * 31)} 85% 62%)`;
+}
+
+function eqGraph(gains, onChange, isOn) {
+  const canvas = h('canvas', { class: 'eq-canvas', tabindex: '0', role: 'application', 'aria-label': 'Equalizer: left and right pick a band, up and down change it' });
+  const tip = h('div', { class: 'eq-tip', hidden: true });
+  let sel = -1, hover = -1, drag = null;
+  const chips = EQ_HZ.map((f, i) => h('button', { class: 'eq-chip', style: `--c:${eqColor(i)}`, onclick: () => { sel = i; canvas.focus(); draw(); } },
+    h('span', { class: 'eq-chip-hz' }, f >= 1000 ? `${f / 1000}k` : String(f)), h('span', { class: 'eq-chip-db' })));
+  const el = h('div', { class: 'eq-graph' }, h('div', { class: 'eq-stage' }, canvas, tip), h('div', { class: 'eq-chips' }, ...chips));
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1, spec = null, raf = 0, pending = false, live = false, last = 0;
+  const PAD = { l: 34, r: 12, t: 14, b: 24 };
+  const fx = (f) => PAD.l + (Math.log(f / 20) / Math.log(1000)) * (W - PAD.l - PAD.r);
+  const gy = (db) => PAD.t + (1 - (db + EQ_RANGE) / (2 * EQ_RANGE)) * (H - PAD.t - PAD.b);
+  const yToDb = (y) => ((1 - (y - PAD.t) / (H - PAD.t - PAD.b)) * 2 - 1) * EQ_RANGE;
+  const cssVar = (name, dflt) => getComputedStyle(el).getPropertyValue(name).trim() || dflt;
+  const mix = (c, pct) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+  const fmtDb = (g) => `${g > 0 ? '+' : ''}${g.toFixed(1)} dB`;
+  const fmtHz = (f) => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
+  const PTS = 240;
+  const FREQS = Array.from({ length: PTS }, (_, k) => 20 * 1000 ** (k / (PTS - 1)));
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width) return;
+    dpr = window.devicePixelRatio || 1;
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    draw();
+  }
+
+  function draw() {
+    if (!W) return;
+    const on = isOn();
+    const text = cssVar('--text', '#fff'), faint = cssVar('--text-faint', '#777'), accent = cssVar('--accent', '#fff');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // Grid and scales.
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.lineWidth = 1;
+    for (const f of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
+      const x = Math.round(fx(f)) + 0.5;
+      ctx.strokeStyle = mix(text, f === 100 || f === 1000 || f === 10000 ? 11 : 6);
+      ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, H - PAD.b); ctx.stroke();
+      ctx.fillStyle = faint;
+      ctx.textAlign = f === 20 ? 'left' : f === 20000 ? 'right' : 'center';
+      ctx.fillText(f >= 1000 ? `${f / 1000}k` : String(f), x, H - 8);
+    }
+    for (const db of [-12, -6, 0, 6, 12]) {
+      const y = Math.round(gy(db)) + 0.5;
+      ctx.strokeStyle = mix(text, db === 0 ? 18 : 6);
+      ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(W - PAD.r, y); ctx.stroke();
+      ctx.fillStyle = faint; ctx.textAlign = 'right';
+      ctx.fillText(db > 0 ? `+${db}` : String(db), PAD.l - 7, y + 3);
+    }
+    // Live spectrum of what's playing (-78..0 dBFS over the full height).
+    if (spec && spec.length) {
+      const n = spec.length, top = PAD.t, bot = H - PAD.b;
+      const sy = (db) => bot - Math.max(0, Math.min(1, (db + 78) / 78)) * (bot - top);
+      const sx = (i) => PAD.l + (i / (n - 1)) * (W - PAD.l - PAD.r);
+      ctx.beginPath(); ctx.moveTo(sx(0), bot);
+      for (let i = 0; i < n; i++) ctx.lineTo(sx(i), sy(spec[i]));
+      ctx.lineTo(sx(n - 1), bot); ctx.closePath();
+      const g = ctx.createLinearGradient(0, top, 0, bot);
+      g.addColorStop(0, mix(text, 30));
+      g.addColorStop(1, mix(text, 3));
+      ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) { if (i) ctx.lineTo(sx(i), sy(spec[i])); else ctx.moveTo(sx(i), sy(spec[i])); }
+      ctx.strokeStyle = mix(text, 40); ctx.lineWidth = 1; ctx.stroke();
+    }
+    // Each band's own shape, faint in its color.
+    if (on) {
+      gains.forEach((g, i) => {
+        if (Math.abs(g) < 0.05) return;
+        ctx.beginPath();
+        FREQS.forEach((f, k) => { const y = gy(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, eqBandDb(i, g, f)))); if (k) ctx.lineTo(fx(f), y); else ctx.moveTo(fx(f), y); });
+        ctx.lineTo(fx(20000), gy(0)); ctx.lineTo(fx(20), gy(0)); ctx.closePath();
+        ctx.fillStyle = mix(eqColor(i), i === sel ? 24 : 11); ctx.fill();
+      });
+    }
+    // The combined curve.
+    ctx.beginPath();
+    FREQS.forEach((f, k) => {
+      const db = on ? gains.reduce((a, g, i) => a + eqBandDb(i, g, f), 0) : 0;
+      const y = gy(Math.max(-EQ_RANGE - 3, Math.min(EQ_RANGE + 3, db)));
+      if (k) ctx.lineTo(fx(f), y); else ctx.moveTo(fx(f), y);
+    });
+    ctx.strokeStyle = on ? accent : faint; ctx.lineWidth = 2.2;
+    ctx.shadowColor = on ? accent : 'transparent'; ctx.shadowBlur = on ? 10 : 0;
+    ctx.stroke(); ctx.shadowBlur = 0;
+    // Band nodes.
+    gains.forEach((g, i) => {
+      const x = fx(EQ_HZ[i]), y = gy(g), big = i === sel || i === hover || drag?.i === i;
+      const c = on ? eqColor(i) : faint;
+      ctx.beginPath(); ctx.arc(x, y, big ? 8 : 6, 0, Math.PI * 2);
+      ctx.fillStyle = c; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0, 0, 0, .55)'; ctx.stroke();
+      if (big) { ctx.beginPath(); ctx.arc(x, y, 12.5, 0, Math.PI * 2); ctx.strokeStyle = mix(c, 55); ctx.lineWidth = 1.5; ctx.stroke(); }
+    });
+    chips.forEach((c, i) => { c.querySelector('.eq-chip-db').textContent = `${gains[i] > 0 ? '+' : ''}${gains[i].toFixed(1)}`; c.classList.toggle('sel', i === sel); });
+    const t = drag ? drag.i : hover;
+    if (t >= 0) {
+      tip.hidden = false;
+      tip.textContent = `${fmtHz(EQ_HZ[t])}  ${fmtDb(gains[t])}`;
+      tip.style.left = `${fx(EQ_HZ[t])}px`;
+      tip.style.top = `${gy(gains[t]) - 18}px`;
+    } else tip.hidden = true;
+  }
+
+  const nodeAt = (x, y) => {
+    let best = -1, bd = 26;
+    EQ_HZ.forEach((f, i) => { const d = Math.hypot(fx(f) - x, (gy(gains[i]) - y) * 0.35); if (d < bd) { bd = d; best = i; } });
+    return best;
+  };
+  const setGain = (i, g) => {
+    gains[i] = Math.round(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, g)) * 10) / 10;
+    onChange(); draw();
+  };
+  const pos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  canvas.addEventListener('pointerdown', (e) => {
+    const [x, y] = pos(e);
+    const i = nodeAt(x, y);
+    if (i < 0) return;
+    sel = i; drag = { i, y0: y, g0: gains[i] };
+    canvas.setPointerCapture(e.pointerId);
+    draw();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const [x, y] = pos(e);
+    if (drag) {
+      // Shift: fine adjustment.
+      const g = drag.g0 + (yToDb(drag.y0 + (y - drag.y0) * (e.shiftKey ? 0.25 : 1)) - yToDb(drag.y0));
+      setGain(drag.i, e.shiftKey ? g : Math.round(g * 2) / 2);
+      return;
+    }
+    const hv = nodeAt(x, y);
+    if (hv !== hover) { hover = hv; canvas.style.cursor = hv >= 0 ? 'ns-resize' : ''; draw(); }
+  });
+  const endDrag = () => { if (drag) { drag = null; draw(); } };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave', () => { if (!drag && hover !== -1) { hover = -1; draw(); } });
+  canvas.addEventListener('dblclick', (e) => { const i = nodeAt(...pos(e)); if (i >= 0) setGain(i, 0); });
+  canvas.addEventListener('wheel', (e) => {
+    const i = hover >= 0 ? hover : sel;
+    if (i < 0) return;
+    e.preventDefault();
+    setGain(i, gains[i] + (e.deltaY < 0 ? 0.5 : -0.5));
+  }, { passive: false });
+  canvas.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 0.1 : 0.5;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { sel = Math.max(0, Math.min(9, (sel < 0 ? 0 : sel) + (e.key === 'ArrowLeft' ? -1 : 1))); draw(); }
+    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0) setGain(sel, gains[sel] + (e.key === 'ArrowUp' ? step : -step));
+    else if ((e.key === 'Home' || e.key === '0') && sel >= 0) setGain(sel, 0);
+    else return;
+    // Keep the app's own shortcuts (seek, volume) out of it.
+    e.preventDefault(); e.stopPropagation();
+  });
+  canvas.addEventListener('focus', () => { if (sel < 0) { sel = 0; draw(); } });
+
+  // Spectrum: polled about 30 times a second while the graph is on screen
+  // and the window is visible; bands rise fast and fall back smoothly.
+  async function tick(t) {
+    if (!el.isConnected) { stop(); return; }
+    raf = requestAnimationFrame(tick);
+    if (document.hidden || pending || t - last < 33) return;
+    last = t; pending = true;
+    let next = [];
+    try { next = await call('audio_spectrum', { bands: 120 }); } catch { /* no backend */ }
+    pending = false;
+    if (next.length) {
+      spec = spec && spec.length === next.length ? spec.map((v, i) => v + (next[i] - v) * (next[i] > v ? 0.6 : 0.18)) : next;
+    } else if (spec) {
+      spec = spec.map((v) => v - 3);
+      if (spec.every((v) => v < -80)) spec = null;
+    } else return;
+    draw();
+  }
+  function start() {
+    if (live) return;
+    live = true;
+    call('analyzer_enable', { on: true }).catch(() => {});
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() {
+    if (!live) return;
+    live = false;
+    cancelAnimationFrame(raf);
+    call('analyzer_enable', { on: false }).catch(() => {});
+  }
+  new ResizeObserver(() => { resize(); if (el.isConnected) start(); }).observe(canvas);
+  return { el, refresh: draw };
 }
 
 function crossfadeControl() {

@@ -297,6 +297,7 @@ impl FeedSource {
             }
         }
         self.limiter.process(samples);
+        crate::analyzer::push(samples, ch, self.ctl.rate);
     }
 }
 

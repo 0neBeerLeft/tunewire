@@ -49,7 +49,7 @@
     spotify_backend: 'auto', include_spotify_in_all: true, spotify_client_id: '', spotify_client_secret: '',
     normalize: true, crossfade: 0, lyrics: true, local_folders: ['/home/you/Music'], downloads_dir: '', ytdlp_source: 'system',
     auto_update: false, discord_rpc: false, discord_client_id: '', discord_buttons: true, repeat: 'off', example_plugin_installed: true,
-    autoplay: true, eq_enabled: false, eq_gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], output_device: '', cover_accent: false, charts_country: 'ZZ', search_history: ['daft punk', 'tame impala'], background: 'art', background_strength: 45, glass_transparency: 58, background_image: '',
+    autoplay: true, eq_enabled: false, eq_gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], output_device: '', cover_accent: false, cover_colors: false, charts_country: 'ZZ', search_history: ['daft punk', 'tame impala'], background: 'art', background_strength: 45, glass_transparency: 58, background_image: '',
   };
   const mix = (id, kind, title, subtitle, ts) => ({ id, kind, title, subtitle, covers: ts.map((t) => t.thumbnail).filter(Boolean).slice(0, 4), tracks: ts });
   const forYou = (stale) => ({
@@ -135,6 +135,17 @@
     new_releases: () => followed.flatMap((a, k) => [0, 1, 2].map((i) => ({ artist: a.name, title: `${a.name} — Release ${i + 1}`, url: `https://music.youtube.com/playlist?list=OLAKmock${k}${i}`, thumbnail: yt('fa5IWHDbftI'), new: i === 0 }))),
     mark_releases_seen: () => {},
     translate_lyrics: ({ lines }) => ({ lines: lines.map((l) => (l ? `[en] ${l}` : l)), source_lang: 'fr' }),
+    analyzer_enable: () => null,
+    // A moving, music-like spectrum while the mock is "playing".
+    audio_spectrum: ({ bands = 96 } = {}) => {
+      if (playback.status !== 'playing') return [];
+      const t = performance.now() / 1000;
+      return Array.from({ length: bands }, (_, i) => {
+        const x = i / bands;
+        const beat = Math.max(0, Math.sin(t * 7.5)) ** 6;
+        return -14 - x * 38 + 9 * beat * Math.exp(-x * 9) + 5 * Math.sin(t * 2 + i * 0.35) * Math.sin(t * 0.7 + i * 0.11) - 4 * Math.random();
+      });
+    },
     cover_color: () => window.__coverColor || '#3d7bd9',
     background_image_color: () => window.__coverColor || '#3d7bd9',
     spotify_user_playlists: () => [{ name: 'Mock mix', url: 'https://open.spotify.com/playlist/mock1', tracks: 3, thumbnail: null, owner: 'dev' }],
@@ -191,7 +202,7 @@
     album_page: () => ({ title: 'Discovery', url: 'x', platform: 'ytmusic', tracks: tracks.slice(0, 5) }),
     complete_metadata: () => [],
     get_lyrics: () => ({ synced: '[00:00.00] One more time\n[00:08.00] We\'re gonna celebrate\n[00:15.00] Oh yeah, all right\n[00:22.00] Don\'t stop the dancing\n[00:30.00] One more time', plain: null, instrumental: false, source: 'LRCLIB' }),
-    list_plugins: () => [], plugins_dir: () => '/home/you/.local/share/app.tunewire.player/plugins',
+    list_plugins: () => (settings.example_plugin_installed ? [{ id: 'now-playing-notes', enabled: true, error: null, path: '/home/you/.local/share/app.tunewire.player/plugins/now-playing-notes', manifest: {"name": "Now Playing Notes", "version": "1.0.0", "description": "Example plugin: a side panel with per-track notes, session stats and a “more by this artist” button, plus a player-bar button.", "author": "Tunewire", "main": "main.js", "style": "style.css", "permissions": ["playback", "queue", "search", "ui", "storage"], "settings": [{"key": "toast_on_change", "label": "Show a toast when a new track starts", "type": "toggle", "default": false}, {"key": "similar_count", "label": "Tracks to queue with “More by this artist”", "type": "number", "default": 3}]} }] : []), plugins_dir: () => '/home/you/.local/share/app.tunewire.player/plugins',
     play_url: () => ({ title: 'Link', url: 'x', platform: 'youtube', tracks: tracks.slice(0, 1) }),
     load_playlist: () => ({ title: 'Remote playlist', url: 'x', platform: 'soundcloud', tracks: tracks.slice(1, 5) }),
     set_spotify_secret: () => null, ytdlp_install: () => ({ ok: true, version: 'mock' }),

@@ -334,7 +334,7 @@ function clearCoverAccent() {
  */
 async function updateAppColors() {
   const s = state.settings || {};
-  if (s.cover_accent === false) return clearCoverAccent();
+  if (!s.cover_colors) return clearCoverAccent();
   const mode = s.background || 'art';
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
@@ -584,6 +584,7 @@ async function updateAmbient() {
   const seq = ++ambient.seq;
   document.documentElement.style.setProperty('--amb-strength', ((s.background_strength ?? 45) / 100).toFixed(2));
   $('#ambient').className = mode;
+  particles.set(mode);
   if (mode === 'stars' || mode === 'snow') return setAmbientLayer(null);
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
@@ -592,3 +593,169 @@ async function updateAmbient() {
   if (seq !== ambient.seq) return;
   setAmbientLayer(wash ? `url("${wash}")` : null);
 }
+
+// Animated backgrounds (Stars, Snow) ------------------------------------------------
+//
+// One canvas behind the app, drawn about 30 times a second from pre-rendered
+// sprites (drawImage only: no per-frame gradients or blur), with a particle
+// count that scales with the window and is capped. Stops when the window is
+// hidden or minimized; one still frame with "reduce motion".
+
+const particles = (() => {
+  let canvas = null, ctx = null, mode = null, raf = 0, last = 0, W = 0, H = 0, items = [], sprites = null, shooting = null, nextShoot = 0, wind = 0, windTarget = 0;
+  const FRAME_MS = 33;
+  const still = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Soft round sprite of `r` px radius (glow fades to transparent).
+  function sprite(r, core = 0.35) {
+    const c = document.createElement('canvas');
+    const s = Math.ceil(r * 2 + 2);
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, r);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(core, 'rgba(255,255,255,.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, s, s);
+    return c;
+  }
+
+  function makeSprites() {
+    return {
+      dot: [sprite(1.4, 0.55), sprite(2, 0.45), sprite(2.8, 0.4)],
+      glow: sprite(9, 0.08),
+      flake: [sprite(1.6, 0.5), sprite(2.6, 0.45), sprite(4, 0.35), sprite(6.5, 0.25)],
+    };
+  }
+
+  function populate() {
+    const area = W * H;
+    items = [];
+    if (mode === 'stars') {
+      const n = Math.min(260, Math.round(area / 6500));
+      for (let i = 0; i < n; i++) {
+        const depth = Math.random() < 0.6 ? 0 : Math.random() < 0.75 ? 1 : 2; // far, mid, near
+        items.push({ x: Math.random() * W, y: Math.random() * H, depth, phase: Math.random() * Math.PI * 2, speed: 0.6 + Math.random() * 1.8, base: 0.35 + Math.random() * 0.55, glow: depth === 2 && Math.random() < 0.35 });
+      }
+    } else if (mode === 'snow') {
+      const n = Math.min(230, Math.round(area / 7500));
+      for (let i = 0; i < n; i++) {
+        const depth = Math.random() < 0.5 ? 0 : Math.random() < 0.7 ? 1 : Math.random() < 0.85 ? 2 : 3;
+        items.push({ x: Math.random() * W, y: Math.random() * H, depth, phase: Math.random() * Math.PI * 2, sway: 0.4 + Math.random() * 1.2, fall: [14, 26, 44, 70][depth] * (0.75 + Math.random() * 0.5), alpha: [0.45, 0.6, 0.8, 0.55][depth] * (0.7 + Math.random() * 0.3) });
+      }
+    }
+  }
+
+  function resize() {
+    if (!canvas) return;
+    // CSS pixels (not device pixels): the particles are soft anyway, and it
+    // keeps the canvas small on high-DPI screens.
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W; canvas.height = H;
+    populate();
+    draw(performance.now(), 0);
+  }
+
+  function draw(t, dt) {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, W, H);
+    const s = dt / 1000;
+    if (mode === 'stars') {
+      const drift = [3, 7, 14]; // px per second, by depth: parallax
+      for (const p of items) {
+        p.x -= drift[p.depth] * s;
+        p.y += drift[p.depth] * 0.35 * s;
+        if (p.x < -10) p.x += W + 20;
+        if (p.y > H + 10) p.y -= H + 20;
+        const tw = p.base * (0.65 + 0.35 * Math.sin(t / 1000 * p.speed + p.phase));
+        ctx.globalAlpha = tw;
+        const img = sprites.dot[p.depth];
+        ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
+        if (p.glow) {
+          ctx.globalAlpha = tw * 0.35;
+          ctx.drawImage(sprites.glow, p.x - sprites.glow.width / 2, p.y - sprites.glow.height / 2);
+        }
+      }
+      // An occasional shooting star.
+      if (!shooting && t > nextShoot && dt) {
+        const fromLeft = Math.random() < 0.5;
+        shooting = { x: fromLeft ? Math.random() * W * 0.5 : W * 0.5 + Math.random() * W * 0.5, y: Math.random() * H * 0.4, vx: (fromLeft ? 1 : -1) * (520 + Math.random() * 260), vy: 220 + Math.random() * 140, life: 0 };
+      }
+      if (shooting) {
+        shooting.life += s;
+        shooting.x += shooting.vx * s;
+        shooting.y += shooting.vy * s;
+        const a = Math.max(0, 1 - shooting.life / 0.9);
+        const len = 0.12;
+        const grad = ctx.createLinearGradient(shooting.x, shooting.y, shooting.x - shooting.vx * len, shooting.y - shooting.vy * len);
+        grad.addColorStop(0, `rgba(255,255,255,${0.9 * a})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(shooting.x, shooting.y);
+        ctx.lineTo(shooting.x - shooting.vx * len, shooting.y - shooting.vy * len);
+        ctx.stroke();
+        if (a <= 0 || shooting.x < -200 || shooting.x > W + 200 || shooting.y > H + 200) {
+          shooting = null;
+          nextShoot = t + 5000 + Math.random() * 9000;
+        }
+      }
+    } else if (mode === 'snow') {
+      // Gentle gusts: the wind wanders towards a new target now and then.
+      if (Math.random() < s * 0.15) windTarget = (Math.random() - 0.5) * 40;
+      wind += (windTarget - wind) * Math.min(1, s * 0.5);
+      for (const p of items) {
+        const k = [0.4, 0.6, 0.85, 1.1][p.depth];
+        p.y += p.fall * s;
+        p.x += (wind * k + Math.sin(t / 1000 * p.sway + p.phase) * 12 * k) * s;
+        if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+        if (p.x < -12) p.x += W + 24;
+        if (p.x > W + 12) p.x -= W + 24;
+        ctx.globalAlpha = p.alpha;
+        const img = sprites.flake[p.depth];
+        ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function loop(t) {
+    raf = requestAnimationFrame(loop);
+    if (document.hidden) { last = t; return; }
+    const dt = t - last;
+    if (dt < FRAME_MS) return;
+    last = t;
+    draw(t, Math.min(dt, 100));
+  }
+
+  function set(next) {
+    const want = next === 'stars' || next === 'snow' ? next : null;
+    if (want === mode) return;
+    mode = want;
+    cancelAnimationFrame(raf);
+    if (!mode) {
+      canvas?.remove();
+      canvas = ctx = null;
+      items = [];
+      return;
+    }
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.className = 'amb-particles';
+      ctx = canvas.getContext('2d');
+      $('#ambient').append(canvas);
+      sprites ||= makeSprites();
+    }
+    shooting = null;
+    nextShoot = performance.now() + 3000;
+    resize();
+    if (!still()) { last = performance.now(); raf = requestAnimationFrame(loop); }
+  }
+
+  window.addEventListener('resize', () => { if (mode) resize(); });
+  return { set };
+})();

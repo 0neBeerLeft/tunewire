@@ -64,7 +64,8 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
   });
   paintFollow();
   const bar = h('div', { class: 'action-bar' },
-    h('button', { class: 'big-play', title: `Play ${a.name}`, html: icon('play'), onclick: () => playAll() }),
+    playButton(h('button', { class: 'big-play', title: `Play ${a.name}`, 'data-title': `Play ${a.name}` }),
+      () => playingOneOf(a.top_songs) || (allSongs ? playingOneOf(allSongs) : false), () => playAll()),
     h('button', { class: 'ab-icon', title: 'Shuffle', html: icon('shuffle'), onclick: () => playAll(true) }),
     follow,
     h('button', { class: 'ab-icon', title: `Start ${a.name} radio`, html: icon('radio'), disabled: !a.top_songs.length, onclick: () => startRadio(a.top_songs[0]) }),

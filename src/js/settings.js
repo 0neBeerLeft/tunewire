@@ -342,6 +342,10 @@ function eqGraph(gains, onChange, isOn) {
   const fmtHz = (f) => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
   const PTS = 240;
   const FREQS = Array.from({ length: PTS }, (_, k) => 20 * 1000 ** (k / (PTS - 1)));
+  // The combined curve at `f`; a band's dot sits on it (like FL Studio), so
+  // dragging a dot visibly pulls the line along with it.
+  const totalAt = (f) => gains.reduce((a, g, i) => a + eqBandDb(i, g, f), 0);
+  const nodeY = (i) => gy(Math.max(-EQ_RANGE - 3, Math.min(EQ_RANGE + 3, totalAt(EQ_HZ[i]))));
 
   function resize() {
     const r = canvas.getBoundingClientRect();
@@ -393,28 +397,29 @@ function eqGraph(gains, onChange, isOn) {
       ctx.strokeStyle = mix(text, 40); ctx.lineWidth = 1; ctx.stroke();
     }
     // Each band's own shape, faint in its color.
-    if (on) {
+    {
       gains.forEach((g, i) => {
         if (Math.abs(g) < 0.05) return;
         ctx.beginPath();
         FREQS.forEach((f, k) => { const y = gy(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, eqBandDb(i, g, f)))); if (k) ctx.lineTo(fx(f), y); else ctx.moveTo(fx(f), y); });
         ctx.lineTo(fx(20000), gy(0)); ctx.lineTo(fx(20), gy(0)); ctx.closePath();
-        ctx.fillStyle = mix(eqColor(i), i === sel ? 24 : 11); ctx.fill();
+        ctx.fillStyle = mix(on ? eqColor(i) : faint, i === sel ? 24 : on ? 11 : 6); ctx.fill();
       });
     }
     // The combined curve.
     ctx.beginPath();
     FREQS.forEach((f, k) => {
-      const db = on ? gains.reduce((a, g, i) => a + eqBandDb(i, g, f), 0) : 0;
+      const db = totalAt(f);
       const y = gy(Math.max(-EQ_RANGE - 3, Math.min(EQ_RANGE + 3, db)));
       if (k) ctx.lineTo(fx(f), y); else ctx.moveTo(fx(f), y);
     });
     ctx.strokeStyle = on ? accent : faint; ctx.lineWidth = 2.2;
     ctx.shadowColor = on ? accent : 'transparent'; ctx.shadowBlur = on ? 10 : 0;
-    ctx.stroke(); ctx.shadowBlur = 0;
+    if (!on) ctx.setLineDash([6, 5]);
+    ctx.stroke(); ctx.shadowBlur = 0; ctx.setLineDash([]);
     // Band nodes.
     gains.forEach((g, i) => {
-      const x = fx(EQ_HZ[i]), y = gy(g), big = i === sel || i === hover || drag?.i === i;
+      const x = fx(EQ_HZ[i]), y = nodeY(i), big = i === sel || i === hover || drag?.i === i;
       const c = on ? eqColor(i) : faint;
       ctx.beginPath(); ctx.arc(x, y, big ? 8 : 6, 0, Math.PI * 2);
       ctx.fillStyle = c; ctx.fill();
@@ -427,13 +432,13 @@ function eqGraph(gains, onChange, isOn) {
       tip.hidden = false;
       tip.textContent = `${fmtHz(EQ_HZ[t])}  ${fmtDb(gains[t])}`;
       tip.style.left = `${fx(EQ_HZ[t])}px`;
-      tip.style.top = `${gy(gains[t]) - 18}px`;
+      tip.style.top = `${nodeY(t) - 18}px`;
     } else tip.hidden = true;
   }
 
   const nodeAt = (x, y) => {
     let best = -1, bd = 26;
-    EQ_HZ.forEach((f, i) => { const d = Math.hypot(fx(f) - x, (gy(gains[i]) - y) * 0.35); if (d < bd) { bd = d; best = i; } });
+    EQ_HZ.forEach((f, i) => { const d = Math.hypot(fx(f) - x, (nodeY(i) - y) * 0.35); if (d < bd) { bd = d; best = i; } });
     return best;
   };
   const setGain = (i, g) => {

@@ -392,7 +392,8 @@ let modalStack = [];
 function openModal({ title, subtitle, body, footer, wide = false, onClose }) {
   const backdrop = h('div', { class: 'modal-backdrop' });
   const modal = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', style: wide ? 'width:min(720px,100%)' : null },
-    h('header', {}, h('h2', {}, title), subtitle ? h('p', { class: 'muted' }, subtitle) : null),
+    h('header', {}, h('h2', {}, title), subtitle ? h('p', { class: 'muted' }, subtitle) : null,
+      h('button', { class: 'modal-close', title: 'Close', 'aria-label': 'Close', html: icon('x'), onclick: () => close() })),
     h('div', { class: 'body' }, body),
     footer ? h('footer', {}, footer) : null);
   backdrop.append(modal);
@@ -457,12 +458,17 @@ function openMenu(anchor, items, { onClose, at } = {}) {
   if (!at && anchor && !anchor.getClientRects().length && lastMenuAnchor?.getClientRects().length) anchor = lastMenuAnchor;
   if (anchor?.getClientRects().length) lastMenuAnchor = anchor;
   const menu = h('div', { class: 'menu', role: 'menu' });
+  // Items: { label, icon?, sub? (second line), checked? (a checkmark, for
+  // choices), onClick }, 'sep', or { label, heading: true }.
   for (const it of items) {
     if (it === 'sep') { menu.append(h('hr')); continue; }
     if (it.heading) { menu.append(h('div', { class: 'menu-label' }, it.label)); continue; }
+    const text = it.sub ? `<span class="mi-text"><span>${esc(it.label)}</span><small>${esc(it.sub)}</small></span>` : `<span class="mi-text"><span>${esc(it.label)}</span></span>`;
     menu.append(h('button', {
-      role: 'menuitem',
-      html: `${it.icon ? icon(it.icon) : ''}<span>${esc(it.label)}</span>`,
+      role: it.checked === undefined ? 'menuitem' : 'menuitemradio',
+      'aria-checked': it.checked === undefined ? null : String(!!it.checked),
+      class: [it.checked ? 'checked' : '', it.sub ? 'two-line' : ''].filter(Boolean).join(' ') || null,
+      html: `${it.icon ? icon(it.icon) : ''}${text}${it.checked ? `<span class="mi-check">${icon('check')}</span>` : ''}`,
       onclick: (e) => { e.stopPropagation(); closeMenu(); it.onClick?.(); },
     }));
   }
@@ -480,6 +486,45 @@ function openMenu(anchor, items, { onClose, at } = {}) {
   openMenuEl = menu;
 }
 document.addEventListener('mousedown', (e) => { if (openMenuEl && !openMenuEl.contains(e.target)) closeMenu(); });
+
+// Every <select> opens the app's own dropdown instead of the system list
+// (which ignores the design): same options, the current one checked, and a
+// pick fires the usual change event. Keyboard use (arrows on a focused
+// select) stays native.
+document.addEventListener('mousedown', (e) => {
+  const sel = e.target.closest?.('select');
+  if (!sel || sel.disabled || sel.multiple || e.button !== 0) return;
+  e.preventDefault();
+  // Or the "click outside closes the menu" handler below would close it
+  // again within this same click.
+  e.stopPropagation();
+  sel.focus();
+  if (openMenuEl && openMenuEl._select === sel) { closeMenu(); return; }
+  const items = [];
+  for (const node of sel.children) {
+    const opts = node.tagName === 'OPTGROUP' ? [...node.children] : [node];
+    if (node.tagName === 'OPTGROUP') items.push({ label: node.label, heading: true });
+    for (const o of opts) {
+      if (o.tagName !== 'OPTION' || o.hidden) continue;
+      items.push({ label: o.textContent, checked: o.value === sel.value, onClick: () => {
+        if (sel.value === o.value) return;
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('input', { bubbles: true }));
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      } });
+    }
+  }
+  openMenu(sel, items);
+  if (openMenuEl) {
+    openMenuEl._select = sel;
+    openMenuEl.classList.add('select-menu');
+    openMenuEl.style.minWidth = `${Math.max(sel.offsetWidth, 180)}px`;
+    // Under the select, left-aligned with it, scrolled to the current choice.
+    const r = sel.getBoundingClientRect();
+    openMenuEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - openMenuEl.offsetWidth - 8))}px`;
+    openMenuEl.querySelector('.checked')?.scrollIntoView({ block: 'nearest' });
+  }
+}, true);
 window.addEventListener('blur', closeMenu);
 window.addEventListener('resize', closeMenu);
 

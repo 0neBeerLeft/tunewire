@@ -2315,3 +2315,203 @@ body:has(#ambient.stars) .modal-backdrop, body:has(#ambient.snow) .modal-backdro
 .plugin-settings .input { width: 110px; height: 32px; border-radius: 9px; }
 .plugin-error { grid-column: 1 / -1; margin-top: 10px; padding: 8px 12px; border-radius: 10px; font-size: 12px;
   color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); }
+
+/* Dropdowns (menus, and every <select> via core.js): glass panel, roomy
+   rounded items, a quiet hover, a checkmark on the current choice. */
+.menu { min-width: 200px; max-width: 320px; padding: 6px !important; border-radius: 14px !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .5), inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4);
+  animation: tw-fade .12s ease !important; }
+.menu button { height: auto; min-height: 34px; padding: 6px 10px; gap: 10px; border-radius: 9px; font-size: 13px; }
+.menu button:hover, .menu button:focus-visible { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.menu button:hover svg.i { color: var(--text); }
+.menu button svg.i { width: 16px; height: 16px; }
+.menu .mi-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.menu .mi-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .mi-text small { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu button.checked { background: color-mix(in srgb, var(--text) 7%, transparent); font-weight: 650; }
+.menu .mi-check { margin-left: auto; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-contrast); flex: none; }
+.menu .mi-check svg.i { width: 12px !important; height: 12px !important; color: inherit !important; stroke-width: 3; }
+.menu .menu-label { padding: 8px 10px 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint); }
+.menu hr { margin: 5px 6px; border-top-color: color-mix(in srgb, var(--text) 9%, transparent); }
+.select-menu { max-height: min(60vh, 420px); }
+/* Menus float over busy content (graphs, covers): nearly solid, so their
+   text always reads, whatever the glass transparency is set to. */
+.menu { background: color-mix(in srgb, var(--panel-solid) 94%, transparent) !important; }
+.device-menu { min-width: 280px; }
+.device-menu button > svg.i:first-child { width: 30px; height: 30px; padding: 7px; border-radius: 9px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+.device-menu button.checked > svg.i:first-child { background: var(--accent); color: var(--accent-contrast); }
+/* The closed <select>: a chevron, so it reads as a dropdown. */
+select:not([multiple]) { -webkit-appearance: none; appearance: none; padding-right: 30px !important; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 11px center !important; background-size: 12px !important; }
+
+/* Dialogs: a clear header with a close button, room to breathe, a defined footer. */
+.modal { width: min(520px, 100%); border-radius: 20px !important; overflow: hidden; }
+.modal header { position: relative; padding: 22px 56px 8px 24px; }
+.modal header h2 { font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.modal header p { margin-top: 5px; font-size: 12.5px; line-height: 1.5; }
+.modal .body { padding: 10px 24px 18px; line-height: 1.5; }
+.modal footer { padding: 14px 24px 20px; gap: 8px; border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent); }
+.modal .body > :last-child, .modal .body .setting:last-child { border-bottom: 0; }
+.modal-close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); background: color-mix(in srgb, var(--text) 7%, transparent); transition: background .15s, color .15s; }
+.modal-close:hover { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
+.modal-close svg.i { width: 15px; height: 15px; }
+
+/* Calmer dock: a softer highlight and edge light. */
+.player-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--text) 4%, var(--panel)) 0%, var(--panel) 60%, color-mix(in srgb, #000 14%, var(--panel)) 100%) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent), 0 16px 44px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .2) !important;
+  border-color: color-mix(in srgb, var(--text) 9%, transparent) !important;
+}
+.player-bar::before { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 18%, transparent) 50%, transparent); }
+.player-bar::after { background: radial-gradient(38% 170% at 9% 50%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%); }
+
+/* Stat tiles: rows fill evenly at any width (they used to wrap 3 + 2 with
+   gaps). */
+.stat-strip { display: flex !important; flex-wrap: wrap; gap: 10px; }
+.stat-strip > .stat-card { flex: 1 1 150px; min-width: 0; }
+.stat-strip > .stat-card:has(.sc-img), .stat-strip > .wrapped-card { flex: 2 1 230px; }
+
+/* Home, Recently played: compact song tiles in a grid, not the wide
+   six-column song table (titles were cut short beside an empty gap). */
+.home-recent { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 8px; }
+.home-recent .track { grid-template-columns: minmax(0, 1fr) auto auto; height: 60px; padding: 0 6px 0 8px; border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 4%, transparent); border: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
+.home-recent .track:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.home-recent .t-num, .home-recent .t-album, .home-recent .t-added, .home-recent .t-dur { display: none; }
+.home-recent .t-titlecell .thumb { width: 44px; height: 44px; border-radius: 8px; }
+.home-recent .like-btn:not(.liked), .home-recent .t-more { opacity: 0; transition: opacity .15s; }
+.home-recent .track:hover .like-btn, .home-recent .track:hover .t-more, .home-recent .track:focus-within .t-more { opacity: 1; }
+.home-recent .track.playing .t-title { color: var(--accent); }
+
+/* Stats: the range switch and Wrapped on one row under the title. */
+.stats-head { flex-direction: column; align-items: flex-start !important; gap: 14px; }
+.stats-controls { display: flex; align-items: center; gap: 10px; width: 100%; flex-wrap: wrap; }
+.stats-controls .wrapped-btn { margin-left: auto; }
+.top-artists { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)) !important; }
+
+/* Listening time chart. */
+.listening-chart { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); height: 210px; padding: 6px 0 24px; margin-top: 10px; }
+.lc-unit { position: absolute; top: -12px; left: 0; font-size: 10px; color: var(--text-faint); }
+.lc-grid { grid-column: 1 / -1; grid-row: 1; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.lc-line { position: relative; height: 0; border-top: 1px dashed color-mix(in srgb, var(--text) 10%, transparent); }
+.lc-line:last-child { border-top: 1px solid color-mix(in srgb, var(--text) 22%, transparent); }
+.lc-line span { position: absolute; left: 0; top: -7px; width: 38px; text-align: right; font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.lc-bars { grid-column: 2; grid-row: 1; display: flex; align-items: flex-end; gap: 4px; padding: 0 2px; }
+.lc-bar { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.lc-fill { width: 100%; max-width: 26px; height: max(var(--h), 3px); border-radius: 5px 5px 2px 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 85%, transparent), color-mix(in srgb, var(--accent) 45%, transparent)); transition: filter .15s; }
+.lc-bar.zero .lc-fill { width: 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--text) 18%, transparent); margin-bottom: -2px; }
+.lc-bar.latest:not(.zero) .lc-fill { background: var(--accent); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }
+.lc-bar:hover .lc-fill { filter: brightness(1.25); }
+.lc-bar em { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 7px; font-style: normal; font-size: 10px; color: var(--text-faint); white-space: nowrap; }
+.lc-tip { position: absolute; bottom: calc(var(--h) + 10px); left: 50%; transform: translateX(-50%); padding: 4px 9px; border-radius: 8px; white-space: nowrap; font-size: 11.5px; font-weight: 700;
+  background: color-mix(in srgb, var(--panel-solid) 94%, transparent); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 2; }
+.lc-bar:hover .lc-tip { opacity: 1; }
+
+/* Less glare everywhere: the glass design's top highlights and bright edges
+   were strong on every panel, card, button and dialog. Toned down across
+   the board (same shapes, quieter light). */
+.sidebar, .main, .queue {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 3%, var(--panel)), var(--panel) 48%) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 7%, transparent), 0 16px 44px rgba(0, 0, 0, .16) !important;
+  border-color: color-mix(in srgb, var(--text) 9%, transparent) !important;
+}
+.titlebar .search, .tb-home, .tb-nav, .tb-btn, .lib-chips button, .search-chips button,
+.btn, .input, .settings input[type=text], .settings input[type=number], .settings select, textarea.input {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent) !important;
+  border-color: color-mix(in srgb, var(--text) 11%, transparent);
+}
+.card, .stat-card, .theme-card, .home-block:has(> .track-list), .home-block:has(.stat-strip), #stats-body > .stat-strip.big, .plugin-card {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent), 0 10px 30px rgba(0, 0, 0, .12) !important;
+  border-color: color-mix(in srgb, var(--text) 9%, transparent) !important;
+}
+.modal, .suggest {
+  background: color-mix(in srgb, var(--panel-solid) 90%, transparent) !important;
+  border-color: color-mix(in srgb, var(--text) 9%, transparent) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5), inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent) !important;
+}
+.menu { box-shadow: 0 18px 48px rgba(0, 0, 0, .5), inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent) !important; border-color: color-mix(in srgb, var(--text) 9%, transparent) !important; }
+.modal .btn.primary { box-shadow: none !important; }
+
+/* Big artwork while its song plays: a slow breath, a soft glow pulsing
+   behind it and an occasional light sweep. Transform and opacity only (no
+   layout, no repaint of the picture), and nothing runs while paused. */
+@keyframes art-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.022); } }
+@keyframes art-glow { 0%, 100% { opacity: .35; } 50% { opacity: .8; } }
+@keyframes art-sweep { 0%, 70% { transform: translateX(-120%) skewX(-18deg); } 100% { transform: translateX(220%) skewX(-18deg); } }
+.npv-cover, .fs-cover, .lf-art, .hero .hero-art, .home-feature .home-feature-art { position: relative; }
+body.is-playing .npv-cover,
+body.is-playing .fs-cover,
+body.is-playing .lf-art,
+.hero.is-live .hero-art,
+.home-feature.is-live .home-feature-art {
+  animation: art-breathe 4.8s ease-in-out infinite;
+  will-change: transform;
+}
+body.is-playing .npv-cover::after,
+body.is-playing .fs-cover::after,
+.hero.is-live .hero-art::after,
+.home-feature.is-live .home-feature-art::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit; overflow: hidden;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .13) 50%, transparent 70%);
+  animation: art-sweep 7s ease-in-out infinite;
+}
+body.is-playing .npv-cover::before,
+body.is-playing .fs-cover::before,
+.hero.is-live .hero-art::before,
+.home-feature.is-live .home-feature-art::before {
+  content: ""; position: absolute; inset: 6%; z-index: -1; pointer-events: none; border-radius: inherit;
+  box-shadow: 0 18px 60px 6px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: art-glow 4.8s ease-in-out infinite;
+}
+.npv-cover, .hero .hero-art, .home-feature .home-feature-art { isolation: isolate; }
+.npv-cover { overflow: visible; }
+.npv-cover img { border-radius: inherit; }
+.artist-hero.is-live { animation: art-breathe 9s ease-in-out infinite; transform-origin: 50% 0; }
+@media (prefers-reduced-motion: reduce) {
+  body.is-playing .npv-cover, body.is-playing .fs-cover, body.is-playing .lf-art, .hero.is-live .hero-art, .home-feature.is-live .home-feature-art, .artist-hero.is-live,
+  body.is-playing .npv-cover::after, body.is-playing .fs-cover::after, .hero.is-live .hero-art::after, .home-feature.is-live .home-feature-art::after { animation: none; }
+}
+
+/* Title boxes (page heads), page heroes and the Home banner: the same calmer
+   light as the rest of the app (they had the brightest gradient and the
+   strongest top highlight). */
+.view > .page-head, .view > div > .page-head:first-child,
+#view-search .page-head, #view-downloads > .page-head, #view-local > .page-head {
+  background: linear-gradient(125deg, color-mix(in srgb, var(--text) 3%, transparent), color-mix(in srgb, var(--panel-solid) 24%, transparent)) !important;
+  border-color: color-mix(in srgb, var(--text) 8%, transparent) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent), 0 10px 26px rgba(0, 0, 0, .1) !important;
+}
+.view .hero, .home-feature {
+  border-color: color-mix(in srgb, var(--text) 9%, transparent) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent), 0 18px 44px rgba(0, 0, 0, .18) !important;
+}
+
+/* The same 8 px between the title bar's controls and the panels as between
+   the panels and the player bar (they were 4 px and 10 px). */
+@media (min-width: 861px) {
+  .app > .sidebar, .app > .main, .app > .queue { margin-top: 4px; }
+  .player-bar { margin-top: 8px !important; }
+}
+/* A less rounded player bar: 20 px corners looked odd beside the square
+   cover; the cover's corners follow. */
+.player-bar { border-radius: 12px !important; }
+.player-bar .cover { border-radius: 6px; overflow: hidden; }
+@media (max-width: 860px) { .player-bar { border-radius: 12px !important; } }
+.stats-controls { flex-wrap: nowrap; } .stats-controls .segmented { flex: 0 1 auto; min-width: 0; overflow-x: auto; }
+
+/* Playlist / album / mix pages: the same rhythm as every other page. The
+   compact sticky header's negative margins pulled the big header up against
+   the panel's top edge; then 16 px between header, buttons and songs. */
+.view .sticky-head + .hero, .view .sticky-head + .artist-hero { margin-top: 20px; }
+.view .hero { margin-bottom: 16px !important; }
+.view .action-bar { margin: 0 0 16px !important; }
+.view .collection-tracks, .view .hero ~ .table-head { margin-top: 0; }
+/* Titles: big, but wrapping to two lines instead of being cut short. */
+.view .hero .hero-title, .view .hero h1 { font-size: clamp(28px, 3.6vw, 52px) !important; line-height: 1.04; white-space: normal !important;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-overflow: clip; overflow-wrap: anywhere; }
+/* The scrollbar corner was drawn white. */
+::-webkit-scrollbar-corner { background: transparent; }

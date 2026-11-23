@@ -14,6 +14,15 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - A new parametric-style equalizer: drag colored bands on a graph of the real curve; double-click resets a band, scroll fine-tunes
 - While a song plays, its sound moves behind the curve
 
+**Polish**
+- Dropdowns and menus redone: every dropdown (presets, devices, settings) opens the app's own menu with a checkmark on the current choice; the device picker shows each output clearly
+- Dialogs have a close button and clearer layout; less glare on panels, buttons, title boxes and dialogs
+- Play buttons on playlist, album, mix and artist pages (and the Home banner) show pause while their music plays
+- Big artwork comes alive while its song plays
+- Home: Recently played as tidy tiles, even stat tiles, four Quick picks
+- Stats: a proper listening-time chart (scale, empty days as dots, hover values) and a tidier layout
+- Even spacing around the panels, the player bar and on playlist pages
+
 **And more**
 - Stars and Snow backgrounds redrawn: depth, twinkling and shooting stars, soft drifting snow; visible under the whole app, and lighter on the GPU
 - The player bar is a floating glass dock

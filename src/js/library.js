@@ -331,9 +331,9 @@ async function heroColor(el, thumb, seqCheck) {
 }
 
 /** Shows the compact header once the big one scrolls away. */
-function stickyHeader(view, hero, title, onPlay) {
+function stickyHeader(view, hero, title, onPlay, isMine = () => false) {
   const bar = h('div', { class: 'sticky-head' },
-    h('button', { class: 'big-play small', title: 'Play', html: icon('play'), onclick: onPlay }),
+    playButton(h('button', { class: 'big-play small', title: 'Play', 'data-title': 'Play' }), isMine, onPlay),
     h('span', { class: 'st-title' }, title));
   const io = new IntersectionObserver(([en]) => bar.classList.toggle('show', !en.isIntersecting && en.boundingClientRect.top < 0), { root: view, threshold: 0 });
   setTimeout(() => io.observe(hero), 0);
@@ -395,8 +395,11 @@ function renderCollection(container, o) {
   const sortBtn = h('button', { class: 'ab-sort', onclick: () => openMenu(sortBtn, [{ label: 'Sort by', heading: true }, ...sorts.map(([k, l]) => ({ label: `${(ps.sort?.key || '') === k ? '✓ ' : ''}${l}`, onClick: () => { ps.sort = k ? { key: k, dir: k === 'added' ? -1 : 1 } : null; renderRows(); sortBtn.firstChild.textContent = l; } }))]) },
     h('span', {}, sorts.find(([k]) => k === (ps.sort?.key || ''))?.[1] || 'Custom order'), h('span', { html: icon('sort') }));
 
+  // Its music: played from this page, or one of its songs (the smart
+  // shuffle's extra picks count too).
+  const isMine = () => isPlayingFrom(o.id) || playingOneOf(tracks) || (o.smart?.recs?.length ? playingOneOf(o.smart.recs) : false);
   const bar = h('div', { class: 'action-bar' },
-    h('button', { class: 'big-play', title: `Play ${o.title}`, html: icon('play'), onclick: play }),
+    playButton(h('button', { class: 'big-play', title: `Play ${o.title}`, 'data-title': `Play ${o.title}` }), isMine, play),
     tracks.length > 1 ? shuffleBtn : null,
     ...(o.actions || []),
     o.menu ? (() => { const b = h('button', { class: 'ab-icon', title: `More options for ${o.title}`, html: icon('dots') }); b.addEventListener('click', () => openMenu(b, o.menu())); return b; })() : null,
@@ -435,7 +438,7 @@ function renderCollection(container, o) {
   renderRows();
   setTimeout(() => list.classList.remove('stagger'), 700);
 
-  const children = [stickyHeader(view, hero, o.title, play), hero, bar];
+  const children = [stickyHeader(view, hero, o.title, play, isMine), hero, bar];
   if (o.status) children.push(o.status);
   if (tracks.length) children.push(trackSection);
   else children.push(o.empty || h('div', { class: 'empty' }, h('p', {}, 'Nothing here yet.')));

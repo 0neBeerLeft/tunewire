@@ -54,15 +54,14 @@ function featuredMix(mix) {
   return h('article', { class: `home-feature kind-${mix.kind}` },
     backdrop ? h('img', { class: 'home-feature-backdrop', src: backdrop, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
     h('div', { class: 'home-feature-copy' },
-      h('div', { class: 'home-feature-kicker' }, h('span', { html: icon('sparkle') }), label),
+      h('div', { class: 'home-feature-kicker' }, label),
       h('h2', {}, mix.title),
       h('p', {}, mix.subtitle || 'A fresh mix built around the music you love.'),
       h('div', { class: 'home-feature-actions' },
-        h('button', { class: 'btn primary big', html: `${icon('play')}Play mix`, onclick: () => playList(mix.tracks, 0) }),
+        playButton(h('button', { class: 'btn primary big' }), () => playingOneOf(mix.tracks), () => playList(mix.tracks, 0), 'Play mix'),
         h('button', { class: 'btn big', onclick: () => openMix(mix) }, 'Explore mix'))),
     h('div', { class: 'home-feature-visual' },
-      mixArt(mix.covers, 'home-feature-art'),
-      h('div', { class: 'home-feature-badge' }, h('span', { html: icon('music') }), 'Made for you')));
+      mixArt(mix.covers, 'home-feature-art')));
 }
 
 /** Compact shortcut tiles at the top (Liked, playlists, mixes). */
@@ -76,7 +75,7 @@ function shortcutTiles(data, featured) {
   }
   if (data?.daily?.[0] && data.daily[0] !== featured) items.push({ title: data.daily[0].title, covers: data.daily[0].covers, go: () => openMix(data.daily[0]) });
   if (!items.length) return null;
-  return h('div', { class: 'shortcut-grid' }, ...items.slice(0, 8).map((it, i) =>
+  return h('div', { class: 'shortcut-grid' }, ...items.slice(0, 4).map((it, i) =>
     h('button', { class: 'shortcut', style: `--i:${i}`, onclick: it.go }, mixArt(it.covers, 'shortcut-art'), h('span', {}, it.title))));
 }
 
@@ -128,7 +127,7 @@ async function renderHome() {
   if (played.length) {
     blocks.push(h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Recently played',
       h('button', { class: 'btn small ml-auto', onclick: () => showView('history') }, 'Show all')),
-      h('div', { class: 'track-list', role: 'listbox', 'aria-label': 'Songs' }, ...played.map((e, i) => trackRow(e.track, i, { onPlay: () => playTrack(e.track, e.platform) })))));
+      h('div', { class: 'track-list home-recent', role: 'listbox', 'aria-label': 'Songs' }, ...played.map((e, i) => trackRow(e.track, i, { onPlay: () => playTrack(e.track, e.platform) })))));
   }
   blocks.push(h('div', { class: 'home-block', id: 'home-stats' }));
   body.replaceChildren(...blocks);
@@ -178,6 +177,31 @@ async function renderHomeStats() {
         h('div', {}, h('b', {}, `Your ${year} Wrapped`), h('span', {}, wrappedTime ? 'Your year in music is ready' : 'Your year so far')))));
 }
 
+/**
+ * Minutes per day/week/month as a chart with a scale: gridlines and labels
+ * on the left, a baseline, empty periods as faint dots (not 2 px stubs, which
+ * made a short history look broken), the latest period highlighted, and the
+ * exact value on hover.
+ */
+function listeningChart(series) {
+  const max = Math.max(1, ...series.map((b) => b.minutes));
+  // A round top for the scale: 4 steps of 1, 2, 5, 10, 20, 50… minutes.
+  const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+  const step = steps.find((v) => v * 4 >= max) || Math.ceil(max / 4);
+  const top = step * 4;
+  const every = Math.max(1, Math.ceil(series.length / 8));
+  const grid = h('div', { class: 'lc-grid' }, ...[4, 3, 2, 1, 0].map((k) => h('div', { class: 'lc-line' }, h('span', {}, k ? fmtMinutes(step * k) : '0'))));
+  const bars = h('div', { class: 'lc-bars' }, ...series.map((b, i) => {
+    const pct = (b.minutes / top) * 100;
+    const last = i === series.length - 1;
+    return h('div', { class: `lc-bar${b.minutes > 0 ? '' : ' zero'}${last ? ' latest' : ''}`, style: `--h:${pct}%;--i:${i}` },
+      h('span', { class: 'lc-fill' }),
+      h('span', { class: 'lc-tip' }, `${b.label} · ${fmtMinutes(b.minutes)} min`),
+      h('em', {}, (i % every === 0 || last) ? b.label : ''));
+  }));
+  return h('div', { class: 'listening-chart' }, h('div', { class: 'lc-unit' }, 'min'), grid, bars);
+}
+
 function statCard(value, label, img) {
   return h('div', { class: 'stat-card' },
     img ? h('img', { src: img, alt: '', referrerpolicy: 'no-referrer', class: 'sc-img', onerror: (e) => e.target.remove() }) : null,
@@ -222,8 +246,9 @@ async function renderStats(range = statsUi.range) {
   const body = $('#stats-body');
   const seg = h('div', { class: 'segmented' }, ...RANGES.map(([k, label]) => h('button', { class: k === range ? 'active' : '', onclick: () => renderStats(k) }, label)));
   const year = new Date().getFullYear();
-  const head = h('div', { class: 'page-head' }, h('h1', {}, 'Your stats'), seg,
-    h('button', { class: 'btn wrapped-btn ml-auto', html: `${icon('gift')}${year} Wrapped`, onclick: () => openWrapped(year) }));
+  const head = h('div', { class: 'page-head stats-head' }, h('h1', {}, 'Your stats'),
+    h('div', { class: 'stats-controls' }, seg,
+      h('button', { class: 'btn wrapped-btn', html: `${icon('gift')}${year} Wrapped`, onclick: () => openWrapped(year) })));
   if (!body.firstChild) body.replaceChildren(head, loadingBox('Counting your listening', skeletonStats(4), h('div', { class: 'track-list' }, ...skeletonRows(5))));
   let s;
   try { s = await call('listening_stats', { range }); } catch (e) { body.replaceChildren(head, h('div', { class: 'empty' }, h('p', {}, errMsg(e)))); return; }
@@ -241,10 +266,7 @@ async function renderStats(range = statsUi.range) {
     statCard(s.artists.toLocaleString(), s.new_artists && range !== 'all' ? `artists · ${s.new_artists} new to you` : 'artists'),
     statCard(`${s.streak} ${s.streak === 1 ? 'day' : 'days'}`, `streak now · best ${s.longest_streak}`));
 
-  // Listening over time.
-  const max = Math.max(1, ...s.series.map((b) => b.minutes));
-  const chart = h('div', { class: 'bar-chart' }, ...s.series.map((b, i) => h('div', { class: 'bar', style: `--h:${(b.minutes / max) * 100}%;--i:${i}`, title: `${b.label}: ${fmtMinutes(b.minutes)} min` },
-    h('span', {}), h('em', {}, s.series.length > 14 && i % Math.ceil(s.series.length / 8) ? '' : b.label))));
+  const chart = listeningChart(s.series);
 
   // Top artists.
   const artists = h('div', { class: 'top-artists' }, ...s.top_artists.slice(0, 10).map((a, i) => h('button', { class: 'top-artist', style: `--i:${i}`, onclick: () => openArtist(a.name, a.top_track) },
@@ -274,7 +296,8 @@ async function renderStats(range = statsUi.range) {
     h('div', { class: 'ps-legend' }, ...s.platforms.map((p) => h('span', {}, h('i', { class: `ps-${p.label.toLowerCase().replace(/[^a-z]/g, '')}` }), `${p.label} ${Math.round((p.minutes / total) * 100)}%`)))) : null;
 
   body.replaceChildren(...[head, cards,
-    h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Listening time'), chart),
+    h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Listening time',
+      h('span', { class: 'meta ml-8' }, `${fmtMinutes(s.minutes)} min in total · ${fmtMinutes(s.minutes / Math.max(1, s.series.filter((b) => b.minutes > 0).length))} min on days you listened`)), chart),
     s.top_artists.length ? h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Top artists'), artists) : null,
     topTracks.length ? h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Top songs',
       h('button', { class: 'btn small ml-auto', html: `${icon('play')}Play all`, onclick: () => playList(topTracks.map((x) => x.track), 0) }),

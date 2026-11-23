@@ -511,7 +511,57 @@ function skeletonRows(n = 8) {
 // Rows currently marked playing/loading: only they and the new ones are
 // touched (not every row on the page) on each playback update.
 let markedRows = [];
+// Play buttons for a whole page (playlist, album, mix, artist, the Home
+// banner): they show pause while their music plays and pause/resume it when
+// clicked again, instead of staying on "play" and restarting from the top.
+const playButtons = new Set();
+
+/**
+ * Make `btn` such a button. `isMine()` says whether what's playing belongs to
+ * it; `start()` plays it from the beginning; `label` is the text after the
+ * icon ("Play mix"), or null for an icon-only button.
+ */
+function playButton(btn, isMine, start, label = null) {
+  btn._isMine = isMine;
+  btn._label = label;
+  btn.onclick = (e) => {
+    e?.stopPropagation?.();
+    if (btn._isMine() && ['playing', 'paused'].includes(state.playback?.status)) call('toggle_pause').catch((err) => toast(errMsg(err), 'error'));
+    else start();
+  };
+  playButtons.add(btn);
+  paintPlayButton(btn);
+  return btn;
+}
+
+function paintPlayButton(btn) {
+  const st = state.playback?.status;
+  const playing = btn._isMine() && (st === 'playing' || st === 'loading');
+  if (btn._painted === playing) return;
+  btn._painted = playing;
+  btn.innerHTML = `${icon(playing ? 'pause' : 'play')}${btn._label ? (playing ? btn._label.replace(/^Play\b/, 'Pause') : btn._label) : ''}`;
+  btn.classList.toggle('is-playing', playing);
+  // The page's big artwork comes alive while its music plays.
+  btn.closest('.view, .home-feature, #home-body')?.querySelector('.home-feature, .hero, .artist-hero')?.classList.toggle('is-live', playing);
+  if (!btn._label) btn.title = playing ? 'Pause' : (btn.dataset.title || btn.title || 'Play');
+}
+
+function syncPlayButtons() {
+  for (const b of playButtons) {
+    if (!b.isConnected) { playButtons.delete(b); continue; }
+    paintPlayButton(b);
+  }
+}
+
+/** Whether the playing song is one of `tracks` (a Set of keys, or an array of tracks). */
+function playingOneOf(tracks) {
+  const k = playingKey();
+  if (!k) return false;
+  return tracks instanceof Set ? tracks.has(k) : tracks.some((t) => t.key === k);
+}
+
 function markPlaying() {
+  syncPlayButtons();
   lastMark = `${playingKey()}|${state.playback?.status}|${state.loadingKey}`;
   const key = playingKey();
   const status = state.playback?.status;

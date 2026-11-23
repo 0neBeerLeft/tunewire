@@ -192,13 +192,16 @@ function paintShuffle() {
 $('#btn-device').addEventListener('click', async (e) => {
   const anchor = e.currentTarget;
   let devs = [];
-  try { devs = await call('list_output_devices'); } catch { /* none */ }
+  try { devs = (await call('list_output_devices')) || []; } catch { /* none */ }
   const cur = state.settings?.output_device || '';
+  const sysName = devs.find((d) => d.default)?.name;
   openMenu(anchor, [
     { label: 'Connect to a device', heading: true },
-    { label: `${cur === '' ? '✓ ' : ''}System default`, icon: 'speaker', onClick: () => setDevice('') },
-    ...devs.map((d) => ({ label: `${cur === d.id ? '✓ ' : ''}${d.name}`, icon: 'speaker', onClick: () => setDevice(d.id) })),
+    { label: 'System default', sub: sysName ? `Now: ${sysName}` : 'Follows Windows sound settings', icon: 'speaker', checked: cur === '', onClick: () => setDevice('') },
+    ...(devs.length ? ['sep'] : []),
+    ...devs.map((d) => ({ label: d.name, sub: d.default ? 'Default output' : null, icon: 'speaker', checked: cur === d.id, onClick: () => setDevice(d.id) })),
   ]);
+  openMenuEl?.classList.add('device-menu');
 });
 async function setDevice(id) {
   await updateSettings({ output_device: id });

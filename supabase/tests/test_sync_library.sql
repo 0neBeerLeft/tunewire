@@ -84,6 +84,10 @@ select tests.fails($$update profiles set created_at = '2020-01-01' where id = au
 update profiles set bio = 'hi', pronouns = 'they/them', share_stats = true where id = auth.uid();
 select tests.check((select bio from profiles where id = auth.uid()) = 'hi', 'own bio still editable');
 -- Stats: no faster than time passes.
+-- test_policies.sql stored stats for this week's Monday; on a Monday that is
+-- current_date, and the insert below would then be checked as an update in
+-- the same week (a different rule). Move that row to last week first.
+update profile_stats set week_start = current_date - 7 where user_id = auth.uid();
 insert into profile_stats (week_start, week_minutes) values (current_date, 10000)
   on conflict (user_id) do update set week_start = excluded.week_start, week_minutes = excluded.week_minutes;
 select tests.check((select week_minutes from profile_stats where user_id = auth.uid()) <= ceil(extract(epoch from now() - (current_date::timestamptz - interval '14 hours')) / 60) + 1, 'week minutes capped by time passed (since the earliest local midnight)');

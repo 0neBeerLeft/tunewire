@@ -3,7 +3,7 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## Unreleased
+## v2.2.0
 
 **New: Discover, made from your taste**
 - A Discover page in the sidebar, built from the artists and songs you play most, your liked songs and the artists you follow

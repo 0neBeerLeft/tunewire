@@ -84,14 +84,13 @@ pub struct Settings {
     pub charts_country: String,
     /// Recent searches, newest first.
     pub search_history: Vec<String>,
-    /// Window background: "art" (playing cover, blurred), "tint" (cover
-    /// color), "image" (background_image) or "plain".
+    /// Window background: "art" (playing cover), "stars" or "snow".
     pub background: String,
     /// 0-100: how visible the background is behind the panels.
     pub background_strength: u32,
     /// 0-80: transparency of the app's glass surfaces.
     pub glass_transparency: u32,
-    /// Picture for background = "image".
+    /// Legacy custom background path from older settings files.
     pub background_image: String,
     /// Shuffle mode (the queue's original order is kept to turn it off again).
     pub shuffle: bool,
@@ -212,7 +211,7 @@ impl Settings {
         self.search_history.truncate(30);
         self.background_strength = self.background_strength.min(100);
         self.glass_transparency = self.glass_transparency.min(80);
-        if !matches!(self.background.as_str(), "art" | "tint" | "image" | "plain") {
+        if !matches!(self.background.as_str(), "art" | "stars" | "snow") {
             self.background = "art".into();
         }
         if !matches!(self.spotify_backend.as_str(), "auto" | "spotdl" | "embed" | "off") {

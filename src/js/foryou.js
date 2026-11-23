@@ -50,7 +50,9 @@ function skeletonTiles(n) {
 
 function featuredMix(mix) {
   const label = mix.kind === 'daily' ? 'DAILY MIX' : mix.kind === 'discover' ? 'DISCOVER WEEKLY' : 'TUNED TO YOU';
+  const backdrop = mix.tracks[0]?.thumbnail || mix.covers?.[0];
   return h('article', { class: `home-feature kind-${mix.kind}` },
+    backdrop ? h('img', { class: 'home-feature-backdrop', src: backdrop, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
     h('div', { class: 'home-feature-copy' },
       h('div', { class: 'home-feature-kicker' }, h('span', { html: icon('sparkle') }), label),
       h('h2', {}, mix.title),

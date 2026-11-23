@@ -406,6 +406,7 @@ function renderCollection(container, o) {
 
   const head = h('div', { class: 'table-head' });
   const list = h('div', { class: `track-list${firstShow ? ' stagger' : ''}`, role: 'listbox', 'aria-label': 'Songs', 'aria-multiselectable': 'true' });
+  const trackSection = h('div', { class: 'collection-tracks' }, head, list);
   const renderRows = () => {
     let idx = tracks.map((t, i) => [t, i]);
     const q = ps.query.trim().toLowerCase();
@@ -436,7 +437,7 @@ function renderCollection(container, o) {
 
   const children = [stickyHeader(view, hero, o.title, play), hero, bar];
   if (o.status) children.push(o.status);
-  if (tracks.length) children.push(head, list);
+  if (tracks.length) children.push(trackSection);
   else children.push(o.empty || h('div', { class: 'empty' }, h('p', {}, 'Nothing here yet.')));
   if (o.after) children.push(o.after);
   container.replaceChildren(...children);

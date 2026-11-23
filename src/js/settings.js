@@ -126,30 +126,23 @@ function renderSettings() {
 
   body.replaceChildren(
     group('Account', null, ...accountSettingsRows()),
+    group('Appearance', null,
+      settingRow('Background', 'Choose the playing cover or a simple pixel-art animation.', backgroundControl()),
+      settingRow('Background strength', null, strengthControl()),
+      settingRow('Glass transparency', 'Choose how much of the background shows through the panels.', glassTransparencyControl()),
+      settingToggle('Colors from the cover', 'Tint the app from the playing song’s cover. Off: keep the black-and-white palette.', 'cover_accent'),
+      settingToggle('Show source icons on songs', 'Always show the YouTube Music / SoundCloud / YouTube / Spotify icons on song rows (otherwise only when you hover a song).', 'show_sources')),
     group('Playback', null,
       settingRow('Source priority', 'When a song exists on several platforms, the first available one plays. If it fails, the next one is tried.', order),
       settingRow('Results per source', null, limit),
       settingToggle('Search YouTube in “All”', 'Adds regular YouTube uploads (live versions, covers) to combined searches.', 'include_youtube_in_all'),
       settingToggle('Autoplay', 'When the queue runs out, keep playing similar songs (YouTube Music radio).', 'autoplay'),
       settingToggle('Close to tray', 'Closing the window keeps music playing. Quit from the tray icon.', 'close_to_tray')),
-    group('Spotify', 'spotify',
-      settingRow('Spotify account', 'Log in to play Spotify’s own audio (Ogg Vorbis up to 320 kbps) when you pick Spotify as the source. Needs <b>Spotify Premium</b>; your login opens in the browser and only a reusable token is stored on this computer. Without it, Spotify songs play from the same recording on YouTube Music.', account),
-      settingRow('Metadata source', 'Search uses Spotify’s own web search (no account needed); pasted links load from the public embed page. spotDL is only a fallback.', backend),
-      settingRow('spotDL (optional fallback)', spotdl ? `Version ${spotdl}` : 'Not installed. Optional: <code>pipx install spotdl</code> or <code>uv tool install spotdl</code>.',
-        h('div', { class: 'actions' }, h('span', { class: `status-pill ${spotdl ? 'ok' : 'bad'}` }, spotdl ? 'Installed' : 'Missing'), recheck(refreshTools))),
-      settingToggle('Search Spotify in “All”', 'Adds Spotify results to combined searches (about half a second).', 'include_spotify_in_all'),
-      settingRow('Spotify app credentials (spotDL)', 'Only used by the spotDL fallback. Its built-in credentials are shared and often rate-limited, which can make it take a minute. A free app from <code>developer.spotify.com/dashboard</code> avoids that (redirect URI: <code>http://127.0.0.1:9900/</code>). The secret is stored in your system keychain, not in a file.', h('div', { class: 'actions' }, credId, credSecret))),
-    group('Sound', null,
+    group('Audio', null,
       settingToggle('Volume normalization', 'Evens out loudness between songs and platforms. Measured from the first seconds of each song, with a soft limiter against clipping.', 'normalize'),
       settingRow('Crossfade', 'Overlap the end of a song with the start of the next. At 0, songs still play back to back without a gap.', crossfadeControl()),
       settingRow('Output device', 'Where the sound goes. Switching continues the current song on the new device.', outputDeviceControl()),
       eqSetting()),
-    group('Appearance', null,
-      settingRow('Background', 'What shows faintly behind the panels.', backgroundControl()),
-      settingRow('Background strength', null, strengthControl()),
-      settingRow('Glass transparency', 'Choose how much of the background shows through the panels.', glassTransparencyControl()),
-      settingToggle('Colors from the background', 'The whole app takes its colors from the background: the playing song’s cover, or your own picture. Off: the theme’s own colors.', 'cover_accent'),
-      settingToggle('Show source icons on songs', 'Always show the YouTube Music / SoundCloud / YouTube / Spotify icons on song rows (otherwise only when you hover a song).', 'show_sources')),
     group('Lyrics', null,
       settingToggle('Show lyrics', 'Fetches synced lyrics from LRCLIB (lrclib.net) for the Lyrics tab next to the queue.', 'lyrics')),
     group('Downloads & local files', null,
@@ -157,14 +150,21 @@ function renderSettings() {
         h('button', { class: 'btn small', onclick: async () => { const d = await pickFolder('Choose download folder'); if (d) { await updateSettings({ downloads_dir: d }); renderSettings(); } } }, 'Change'),
         s.downloads_dir ? h('button', { class: 'btn small', onclick: async () => { await updateSettings({ downloads_dir: '' }); renderSettings(); } }, 'Reset') : null)),
       settingRow('Music folders', (s.local_folders || []).length ? s.local_folders.map(esc).join('<br>') : 'None. Local files are searched together with online sources.', h('button', { class: 'btn small', onclick: () => showView('local') }, 'Manage'))),
+    group('Spotify', 'spotify',
+      settingRow('Spotify account', 'Log in to play Spotify’s own audio (Ogg Vorbis up to 320 kbps) when you pick Spotify as the source. Needs <b>Spotify Premium</b>; your login opens in the browser and only a reusable token is stored on this computer. Without it, Spotify songs play from the same recording on YouTube Music.', account),
+      settingRow('Metadata source', 'Search uses Spotify’s own web search (no account needed); pasted links load from the public embed page. spotDL is only a fallback.', backend),
+      settingRow('spotDL (optional fallback)', spotdl ? `Version ${spotdl}` : 'Not installed. Optional: <code>pipx install spotdl</code> or <code>uv tool install spotdl</code>.',
+        h('div', { class: 'actions' }, h('span', { class: `status-pill ${spotdl ? 'ok' : 'bad'}` }, spotdl ? 'Installed' : 'Missing'), recheck(refreshTools))),
+      settingToggle('Search Spotify in “All”', 'Adds Spotify results to combined searches (about half a second).', 'include_spotify_in_all'),
+      settingRow('Spotify app credentials (spotDL)', 'Only used by the spotDL fallback. Its built-in credentials are shared and often rate-limited, which can make it take a minute. A free app from <code>developer.spotify.com/dashboard</code> avoids that (redirect URI: <code>http://127.0.0.1:9900/</code>). The secret is stored in your system keychain, not in a file.', h('div', { class: 'actions' }, credId, credSecret))),
     group('Discord', 'discord',
       discordStatusRow(),
       settingToggle('Rich Presence', 'Shows the current song, artist, cover and progress on your Discord profile while the desktop client is running.', 'discord_rpc'),
       settingToggle('Link button', 'Adds an “Open on YouTube Music” (or SoundCloud, …) button to the status.', 'discord_buttons')),
     group('Scrobbling', null, ...scrobbleSettingsRows()),
-    group('Backup', null, ...backupSettingsRows()),
     group('Privacy', null,
       settingToggle('Send error reports', 'Off unless you turn it on. When something breaks, Tunewire sends the developer a short report (app version, operating system and the error) so it can be fixed. Your folder paths and stream links are removed first; nothing about your library is sent.', 'error_reports')),
+    group('Backup', null, ...backupSettingsRows()),
     group('Tools', null,
       updateSettingsRow(),
       settingRow('yt-dlp', `${esc($('#health').title || '')}<br><code>${esc(state.ytdlpPath || '')}</code>`, recheck(checkHealth)),
@@ -199,17 +199,13 @@ async function checkHealth(target) {
 function backgroundControl() {
   const s = state.settings;
   const sel = h('select', {},
-    ...[['art', 'Playing song’s cover'], ['tint', 'Color from the cover'], ['image', 'My picture'], ['plain', 'Plain']]
+    ...[['art', 'Playing song’s cover'], ['stars', 'Pixel starfield'], ['snow', 'Pixel snowfall']]
       .map(([v, l]) => h('option', { value: v, selected: (s.background || 'art') === v }, l)));
   sel.addEventListener('change', async () => {
-    if (sel.value === 'image' && !s.background_image) { await pickBackgroundImage(); return; }
     await updateSettings({ background: sel.value });
     updateAmbient();
-    renderSettings();
   });
-  const name = s.background_image ? s.background_image.split(/[\\/]/).pop() : '';
-  return h('div', { class: 'actions' }, sel,
-    (s.background || 'art') === 'image' ? h('button', { class: 'btn small', title: s.background_image || '', onclick: pickBackgroundImage }, name ? `Change (${name})` : 'Choose…') : null);
+  return sel;
 }
 
 function strengthControl() {
@@ -262,31 +258,54 @@ function eqSetting() {
       ...(cur === 'Custom' ? [h('option', { value: 'Custom', selected: true }, 'Custom')] : []));
   };
   const save = throttle(() => updateSettings({ eq_gains: gains }), 150);
+  const setSliderFill = (slider, value) => {
+    const pct = ((value + 12) / 24) * 100;
+    slider.style.setProperty('--eq-start', `${value < 0 ? pct : 50}%`);
+    slider.style.setProperty('--eq-end', `${value < 0 ? 50 : pct}%`);
+  };
   const sliders = gains.map((g, i) => {
     const val = h('span', { class: 'eq-val' }, `${g > 0 ? '+' : ''}${g}`);
     const r = h('input', { type: 'range', min: -12, max: 12, step: 1, value: g, class: 'eq-slider', 'aria-label': `${EQ_BANDS[i]} Hz` });
+    setSliderFill(r, g);
     r.addEventListener('input', () => {
       gains[i] = Number(r.value);
       val.textContent = `${gains[i] > 0 ? '+' : ''}${gains[i]}`;
+      setSliderFill(r, gains[i]);
       fillPresets();
       save();
     });
     r.addEventListener('dblclick', () => { r.value = 0; r.dispatchEvent(new Event('input')); });
     return h('div', { class: 'eq-band' }, val, r, h('span', { class: 'eq-hz' }, EQ_BANDS[i]));
   });
-  preset.addEventListener('change', () => {
-    const p = EQ_PRESETS[preset.value];
-    if (!p) return;
-    p.forEach((g, i) => { gains[i] = g; const r = sliders[i].querySelector('input'); r.value = g; sliders[i].querySelector('.eq-val').textContent = `${g > 0 ? '+' : ''}${g}`; });
+  const applyPreset = (values) => {
+    values.forEach((g, i) => {
+      gains[i] = g;
+      const slider = sliders[i].querySelector('input');
+      slider.value = g;
+      setSliderFill(slider, g);
+      sliders[i].querySelector('.eq-val').textContent = `${g > 0 ? '+' : ''}${g}`;
+    });
+    fillPresets();
     updateSettings({ eq_gains: gains });
+  };
+  preset.addEventListener('change', () => {
+    const values = EQ_PRESETS[preset.value];
+    if (values) applyPreset(values);
   });
+  const reset = h('button', { class: 'btn small', onclick: () => applyPreset(EQ_PRESETS.Flat) }, 'Reset');
   fillPresets();
-  const enabled = h('input', { type: 'checkbox', checked: !!s.eq_enabled });
+  const enabled = h('input', { type: 'checkbox', checked: !!s.eq_enabled, 'aria-label': 'Enable equalizer' });
+  const status = h('span', { class: `eq-status${s.eq_enabled ? ' on' : ''}` }, s.eq_enabled ? 'On' : 'Off');
   const panel = h('div', { class: `eq-panel${s.eq_enabled ? '' : ' off'}` }, ...sliders);
-  enabled.addEventListener('change', () => { panel.classList.toggle('off', !enabled.checked); updateSettings({ eq_enabled: enabled.checked }); });
+  enabled.addEventListener('change', () => {
+    panel.classList.toggle('off', !enabled.checked);
+    status.classList.toggle('on', enabled.checked);
+    status.textContent = enabled.checked ? 'On' : 'Off';
+    updateSettings({ eq_enabled: enabled.checked });
+  });
   return h('div', { class: 'setting eq-setting' },
-    h('div', { class: 'label' }, 'Equalizer', h('small', {}, 'Ten bands from 31 Hz to 16 kHz. Double-click a slider to reset it.')),
-    h('div', { class: 'actions' }, preset, h('label', { class: 'switch' }, enabled, h('span'))),
+    h('div', { class: 'label' }, 'Equalizer', h('small', {}, 'Shape ten frequency bands. Double-click a slider to reset that band.')),
+    h('div', { class: 'actions eq-actions' }, preset, reset, status, h('label', { class: 'switch' }, enabled, h('span'))),
     panel);
 }
 

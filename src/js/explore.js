@@ -330,10 +330,7 @@ function clearCoverAccent() {
 }
 
 /**
- * Color the app after its background: the playing song's cover (art and
- * tint backgrounds), your own picture (image background), or, with a plain
- * background, just the accent from the cover. Settings → "Colors from the
- * background" turns it off (the theme's own colors then).
+ * Optionally tint the interface from the playing song's cover.
  */
 async function updateAppColors() {
   const s = state.settings || {};
@@ -342,20 +339,11 @@ async function updateAppColors() {
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
   let source, getAccent, getTone;
-  if (mode === 'image' && s.background_image) {
-    const path = s.background_image;
-    source = `image:${path}`;
-    getAccent = () => call('background_image_color', { path });
-    getTone = async () => averageColor(ambient.imgPath === path && ambient.imgData ? ambient.imgData : await call('background_image_data', { path }));
-  } else if (thumb) {
-    const url = imgUrl(thumb, 120);
-    source = `cover:${thumb}`;
-    getAccent = () => call('cover_color', { url });
-    // Art background: the blurred cover itself. Tint: pools of its color.
-    getTone = mode === 'art' ? async () => averageColor(await call('cover_wash', { url })) : null;
-  } else {
-    return clearCoverAccent();
-  }
+  if (!thumb) return clearCoverAccent();
+  const url = imgUrl(thumb, 120);
+  source = `cover:${thumb}`;
+  getAccent = () => call('cover_color', { url });
+  getTone = mode === 'art' ? async () => averageColor(await call('cover_wash', { url })) : null;
   const key = `${source}|${mode}|${document.documentElement.dataset.mode || 'dark'}`;
   if (key === appColors.key) return;
   appColors.key = key;
@@ -561,7 +549,7 @@ async function syncPlaylist(id, btn) {
 
 // Ambient background ------------------------------------------------------------
 
-const ambient = { cur: 0, css: undefined, imgPath: null, imgData: null, seq: 0, swap: 0 };
+const ambient = { cur: 0, css: undefined, seq: 0, swap: 0 };
 
 /** Crossfade to a new background (any CSS background-image value, or none). */
 /**
@@ -596,38 +584,11 @@ async function updateAmbient() {
   const seq = ++ambient.seq;
   document.documentElement.style.setProperty('--amb-strength', ((s.background_strength ?? 45) / 100).toFixed(2));
   $('#ambient').className = mode;
-  if (mode === 'plain') return setAmbientLayer(null);
-  if (mode === 'image') {
-    if (!s.background_image) return setAmbientLayer(null);
-    if (ambient.imgPath !== s.background_image) {
-      ambient.imgPath = s.background_image;
-      try { ambient.imgData = await call('background_image_data', { path: s.background_image }); } catch (e) { ambient.imgData = null; toast(errMsg(e), 'error'); }
-      if (seq !== ambient.seq) return;
-    }
-    return setAmbientLayer(ambient.imgData ? `url("${ambient.imgData}")` : null);
-  }
+  if (mode === 'stars' || mode === 'snow') return setAmbientLayer(null);
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
   if (!thumb) return setAmbientLayer(null);
-  if (mode === 'art') {
-    // A tiny pre-blurred picture made by the backend: no live blur filter.
-    const wash = await call('cover_wash', { url: imgUrl(thumb, 120) }).catch(() => null);
-    if (seq !== ambient.seq) return;
-    return setAmbientLayer(wash ? `url("${wash}")` : null);
-  }
-  // tint: two soft pools of the cover's main color.
-  const color = await call('cover_color', { url: imgUrl(thumb, 120) }).catch(() => null);
+  const wash = await call('cover_wash', { url: imgUrl(thumb, 120) }).catch(() => null);
   if (seq !== ambient.seq) return;
-  setAmbientLayer(color ? `radial-gradient(55% 55% at 20% 15%, ${color}, transparent 72%), radial-gradient(50% 60% at 85% 85%, ${color}99, transparent 72%)` : null);
-}
-
-async function pickBackgroundImage() {
-  try {
-    const r = await window.__TAURI__.dialog.open({ multiple: false, title: 'Choose a background image', filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
-    const path = Array.isArray(r) ? r[0] : r;
-    if (!path) return;
-    await updateSettings({ background_image: path, background: 'image' });
-    updateAmbient();
-    renderSettings();
-  } catch (e) { toast(errMsg(e), 'error'); }
+  setAmbientLayer(wash ? `url("${wash}")` : null);
 }

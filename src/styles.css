@@ -1846,3 +1846,104 @@ body.dragging-tracks .track:hover { background: transparent; }
    no blur of its own (one live blur, not two); a little more body instead. */
 .modal { -webkit-backdrop-filter: none; backdrop-filter: none; --glass: color-mix(in srgb, var(--panel-solid) 80%, transparent); }
 .modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* Home dashboard ---------------------------------------------------------- */
+#view-home { padding: clamp(22px, 3vw, 42px) clamp(22px, 3.2vw, 48px) 48px; }
+#home-body { width: 100%; max-width: 1440px; margin: 0 auto; }
+.home-hello { padding: 0 4px 12px; }
+.home-hello h1 { font-size: clamp(27px, 3vw, 36px); font-weight: 800; letter-spacing: -.035em; margin: 0; }
+
+.home-feature {
+  --feature-tint: color-mix(in srgb, var(--accent) 26%, #8c68e8);
+  isolation: isolate;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(210px, .8fr);
+  align-items: center;
+  min-height: 250px;
+  padding: clamp(24px, 3vw, 40px);
+  margin: 4px 0 28px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 24%, transparent);
+  border-radius: 22px;
+  background: linear-gradient(112deg, color-mix(in srgb, var(--feature-tint) 38%, var(--bg-elev)) 0%, color-mix(in srgb, var(--feature-tint) 22%, var(--bg-elev)) 48%, color-mix(in srgb, var(--bg-elev) 42%, transparent) 100%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent), 0 20px 54px rgba(0, 0, 0, .22);
+}
+.home-feature::before, .home-feature::after { content: ""; position: absolute; pointer-events: none; }
+.home-feature::before {
+  z-index: -1;
+  width: 64%;
+  aspect-ratio: 1;
+  right: -8%;
+  top: -82%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--feature-tint) 55%, transparent), transparent 68%);
+  filter: blur(20px);
+}
+.home-feature::after { inset: 1px 12% auto; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 50%, transparent), transparent); }
+.home-feature.kind-discover { --feature-tint: color-mix(in srgb, #8464ee 55%, var(--accent)); }
+.home-feature-copy { position: relative; z-index: 1; max-width: 620px; }
+.home-feature-kicker { display: flex; align-items: center; gap: 8px; color: color-mix(in srgb, var(--text) 78%, var(--feature-tint)); font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.home-feature-kicker svg.i { width: 15px; height: 15px; color: var(--accent); }
+.home-feature-copy h2 { margin: 10px 0 8px; font-size: clamp(34px, 5vw, 58px); font-weight: 850; line-height: .98; letter-spacing: -.045em; }
+.home-feature-copy p { max-width: 500px; margin: 0; color: color-mix(in srgb, var(--text) 76%, transparent); font-size: 15px; line-height: 1.5; }
+.home-feature-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.home-feature-actions .btn { border-radius: 999px; }
+.home-feature-actions .btn.primary { border-color: color-mix(in srgb, #fff 16%, var(--accent)); }
+.home-feature-visual { position: relative; min-height: 190px; display: grid; place-items: center; }
+.home-feature-art { position: relative; display: grid; width: clamp(170px, 19vw, 230px); aspect-ratio: 1; overflow: hidden; border-radius: 18px; transform: rotate(5deg); background: color-mix(in srgb, var(--feature-tint) 45%, var(--bg-elev-2)); box-shadow: 0 22px 54px rgba(0, 0, 0, .38), 0 0 42px color-mix(in srgb, var(--feature-tint) 36%, transparent); }
+.home-feature-art::after { content: ""; position: absolute; inset: 0; border: 1px solid color-mix(in srgb, #fff 38%, transparent); border-radius: inherit; background: linear-gradient(145deg, rgba(255,255,255,.22), transparent 38%); pointer-events: none; }
+.home-feature-art img { width: 100%; height: 100%; object-fit: cover; }
+.home-feature-art.grid4 { grid-template-columns: 1fr 1fr; }
+.home-feature-art svg.i { width: 38%; height: 38%; margin: auto; }
+.home-feature-badge { position: absolute; left: 0; bottom: 5%; display: flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid color-mix(in srgb, #fff 24%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--panel-solid) 58%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent), 0 8px 24px rgba(0, 0, 0, .2); font-size: 12px; font-weight: 700; }
+.home-feature-badge svg.i { width: 14px; height: 14px; color: var(--accent); }
+
+.shortcut-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; margin: 0 0 34px; }
+.shortcut { height: 64px; border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 12px; background: linear-gradient(120deg, color-mix(in srgb, var(--text) 9%, transparent), color-mix(in srgb, var(--panel-solid) 25%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent); transition: transform .18s var(--ease-out), background .18s ease, border-color .18s ease; }
+.shortcut:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 44%, transparent); background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--panel-solid) 34%, transparent)); }
+.shortcut-art { width: 64px; height: 64px; }
+.home-block { margin: 0 0 36px; }
+.home-quick { max-width: none; }
+.home-quick .shortcut-grid { margin-bottom: 0; }
+.home-block:has(.mix-row) .section-title { margin: 0 0 14px; }
+.home-block:has(> .track-list), .home-block:has(.stat-strip) { padding: 18px; border: 1px solid color-mix(in srgb, var(--text) 15%, transparent); border-radius: 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--text) 5%, transparent), color-mix(in srgb, var(--panel-solid) 26%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12); }
+.home-block:has(> .track-list) .section-title, .home-block:has(.stat-strip) .section-title { margin: 0 0 12px; }
+.home-block:has(> .track-list) .track { border-radius: 10px; }
+.home-block:has(> .track-list) .table-head { background: transparent; }
+.mix-row { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 18px; }
+.mix-cover { border-radius: 14px; box-shadow: 0 12px 30px rgba(0,0,0,.24); }
+.mix-tile:hover .mix-cover, .mix-tile:focus-visible .mix-cover { transform: translateY(-4px) scale(1.015); box-shadow: 0 20px 42px rgba(0,0,0,.34); }
+.mix-sub { font-size: 13px; margin: 10px 2px 0; }
+.stat-strip { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.stat-card { border-radius: 12px; }
+
+@media (max-width: 1000px) {
+  .home-feature { grid-template-columns: minmax(0, 1.15fr) minmax(170px, .85fr); }
+  .home-feature-art { width: clamp(150px, 22vw, 190px); }
+  .mix-row { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+@media (max-width: 680px) {
+  #view-home { padding: 20px 16px 36px; }
+  .home-feature { grid-template-columns: minmax(0, 1fr) 112px; min-height: 220px; padding: 22px 18px; border-radius: 18px; }
+  .home-feature-copy h2 { font-size: clamp(30px, 8vw, 42px); }
+  .home-feature-copy p { font-size: 13px; }
+  .home-feature-actions { gap: 7px; margin-top: 16px; }
+  .home-feature-actions .btn { height: 30px; padding: 0 12px; font-size: 12px; }
+  .home-feature-visual { min-height: 140px; }
+  .home-feature-art { width: 126px; border-radius: 14px; }
+  .home-feature-badge { left: -10px; bottom: -2%; padding: 6px 9px; font-size: 10px; }
+  .shortcut-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .shortcut { height: 56px; font-size: 12px; }
+  .shortcut-art { width: 56px; height: 56px; }
+  .mix-row { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 16px 12px; }
+  .home-block:has(> .track-list), .home-block:has(.stat-strip) { padding: 14px; }
+}
+@media (max-width: 420px) {
+  .home-feature { grid-template-columns: minmax(0, 1fr) 82px; padding: 18px 14px; }
+  .home-feature-visual { min-height: 120px; }
+  .home-feature-art { width: 96px; }
+  .home-feature-badge { left: -14px; }
+  .home-feature-actions .btn:not(.primary) { display: none; }
+  .shortcut-grid { grid-template-columns: minmax(0, 1fr); }
+}

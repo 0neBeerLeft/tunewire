@@ -48,16 +48,31 @@ function skeletonTiles(n) {
   return Array.from({ length: n }, (_, i) => h('div', { class: 'mix-tile skeleton', style: `--i:${i}` }, h('div', { class: 'mix-cover' }), h('div', { class: 'mix-sub' }, ' ')));
 }
 
+function featuredMix(mix) {
+  const label = mix.kind === 'daily' ? 'DAILY MIX' : mix.kind === 'discover' ? 'DISCOVER WEEKLY' : 'TUNED TO YOU';
+  return h('article', { class: `home-feature kind-${mix.kind}` },
+    h('div', { class: 'home-feature-copy' },
+      h('div', { class: 'home-feature-kicker' }, h('span', { html: icon('sparkle') }), label),
+      h('h2', {}, mix.title),
+      h('p', {}, mix.subtitle || 'A fresh mix built around the music you love.'),
+      h('div', { class: 'home-feature-actions' },
+        h('button', { class: 'btn primary big', html: `${icon('play')}Play mix`, onclick: () => playList(mix.tracks, 0) }),
+        h('button', { class: 'btn big', onclick: () => openMix(mix) }, 'Explore mix'))),
+    h('div', { class: 'home-feature-visual' },
+      mixArt(mix.covers, 'home-feature-art'),
+      h('div', { class: 'home-feature-badge' }, h('span', { html: icon('music') }), 'Made for you')));
+}
+
 /** Compact shortcut tiles at the top (Liked, playlists, mixes). */
-function shortcutTiles(data) {
+function shortcutTiles(data, featured) {
   const items = [];
   if (state.favorites?.length) items.push({ title: 'Liked songs', covers: state.favorites.slice(0, 4).map((t) => t.thumbnail), go: () => showView('favorites') });
-  if (data?.discover) items.push({ title: 'Discover Weekly', covers: data.discover.covers, go: () => openMix(data.discover) });
+  if (data?.discover && data.discover !== featured) items.push({ title: 'Discover Weekly', covers: data.discover.covers, go: () => openMix(data.discover) });
   for (const m of data?.local || []) items.push({ title: m.title, covers: m.covers, go: () => openMix(m) });
   for (const p of (state.playlists || []).slice().sort((a, b) => b.updated - a.updated)) {
     items.push({ title: p.name, covers: p.tracks.slice(0, 4).map((t) => t.thumbnail), go: () => openPlaylist(p.id) });
   }
-  if (data?.daily?.[0]) items.push({ title: data.daily[0].title, covers: data.daily[0].covers, go: () => openMix(data.daily[0]) });
+  if (data?.daily?.[0] && data.daily[0] !== featured) items.push({ title: data.daily[0].title, covers: data.daily[0].covers, go: () => openMix(data.daily[0]) });
   if (!items.length) return null;
   return h('div', { class: 'shortcut-grid' }, ...items.slice(0, 8).map((it, i) =>
     h('button', { class: 'shortcut', style: `--i:${i}`, onclick: it.go }, mixArt(it.covers, 'shortcut-art'), h('span', {}, it.title))));
@@ -72,9 +87,11 @@ async function renderHome() {
   if (seq !== home.seq) return;
   const d = home.data;
 
+  const featured = d.empty ? null : d.daily?.[0] || d.discover;
   const blocks = [h('div', { class: 'home-hello' }, h('h1', {}, greeting()))];
-  const shortcuts = shortcutTiles(d);
-  if (shortcuts) blocks.push(shortcuts);
+  if (featured) blocks.push(featuredMix(featured));
+  const shortcuts = shortcutTiles(d, featured);
+  if (shortcuts) blocks.push(h('div', { class: 'home-block home-quick' }, h('div', { class: 'section-title' }, 'Quick picks'), shortcuts));
 
   if (d.empty) {
     blocks.push(h('div', { class: 'empty home-empty' },
@@ -88,15 +105,15 @@ async function renderHome() {
     return;
   }
 
-  // Made for you: Discover Weekly first, then the Daily Mixes.
+  // Keep the featured mix out of its follow-up row.
   const madeRow = h('div', { class: 'mix-row' });
-  const made = [d.discover, ...d.daily].filter(Boolean);
+  const made = [d.discover, ...d.daily].filter((mix) => mix && mix !== featured);
   if (made.length) madeRow.append(...made.map((m, i) => mixTile(m, i)));
   else if (d.stale || home.refreshing) madeRow.append(...skeletonTiles(5));
   const refreshBtn = h('button', { class: 'btn small', html: `${icon('refresh')}New mixes`, title: 'Build new mixes now', onclick: () => refreshHome(true, refreshBtn) });
   if (made.length || d.stale || home.refreshing) {
     blocks.push(h('div', { class: 'home-block' },
-      h('div', { class: 'section-title' }, 'Made for you', h('span', { class: 'meta ml-8' }, 'Daily Mixes update every day, Discover Weekly every Monday'), h('span', { class: 'ml-auto' }), refreshBtn),
+      h('div', { class: 'section-title' }, featured ? 'More made for you' : 'Made for you', h('span', { class: 'meta ml-8' }, 'Daily Mixes update every day, Discover Weekly every Monday'), h('span', { class: 'ml-auto' }), refreshBtn),
       madeRow));
   }
 
@@ -105,14 +122,13 @@ async function renderHome() {
       h('div', { class: 'mix-row' }, ...d.local.map((m, i) => mixTile(m, i)))));
   }
 
-  blocks.push(h('div', { class: 'home-block', id: 'home-stats' }));
-
   const played = (state.history || []).slice(0, 6);
   if (played.length) {
     blocks.push(h('div', { class: 'home-block' }, h('div', { class: 'section-title' }, 'Recently played',
       h('button', { class: 'btn small ml-auto', onclick: () => showView('history') }, 'Show all')),
       h('div', { class: 'track-list', role: 'listbox', 'aria-label': 'Songs' }, ...played.map((e, i) => trackRow(e.track, i, { onPlay: () => playTrack(e.track, e.platform) })))));
   }
+  blocks.push(h('div', { class: 'home-block', id: 'home-stats' }));
   body.replaceChildren(...blocks);
   markPlaying();
   renderHomeStats();

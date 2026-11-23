@@ -105,6 +105,7 @@ async function boot() {
     state.settings = { platform_order: ['ytmusic', 'soundcloud', 'youtube', 'spotify'], search_limit: 12, theme: 'midnight', last_source: 'all', plugin_settings: {}, enabled_plugins: [] };
   }
   setSource(state.settings.last_source || 'all');
+  applyGlassTransparency();
   // First run: ask before anything is ever reported.
   setTimeout(askPrivacyFirstRun, 1200);
   setVolumeUI(state.settings.volume ?? 0.7);

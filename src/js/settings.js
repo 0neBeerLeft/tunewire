@@ -29,6 +29,24 @@ function settingRow(label, help, control) {
   return h('div', { class: 'setting' }, h('div', { class: 'label' }, label, help ? h('small', { html: help }) : null), control);
 }
 
+function applyGlassTransparency(value = state.settings?.glass_transparency ?? 58) {
+  document.documentElement.style.setProperty('--glass-transparency', `${value}%`);
+}
+
+function glassTransparencyControl() {
+  const value = state.settings.glass_transparency ?? 58;
+  const label = h('span', { class: 'meta w-38 text-right' }, `${value}%`);
+  const range = h('input', { class: 'w-160', type: 'range', min: 0, max: 80, step: 5, value });
+  range.style.setProperty('--fill', `${(value / 80) * 100}%`);
+  range.addEventListener('input', () => {
+    label.textContent = `${range.value}%`;
+    range.style.setProperty('--fill', `${(Number(range.value) / 80) * 100}%`);
+    applyGlassTransparency(Number(range.value));
+  });
+  range.addEventListener('change', () => updateSettings({ glass_transparency: Number(range.value) }));
+  return h('div', { class: 'actions' }, range, label);
+}
+
 function group(title, brand, ...rows) {
   return h('div', { class: `group ${brand || ''}` }, h('h2', { html: `${brand ? plogo(brand) : ''}<span>${esc(title)}</span>` }), ...rows);
 }
@@ -129,6 +147,7 @@ function renderSettings() {
     group('Appearance', null,
       settingRow('Background', 'What shows faintly behind the panels.', backgroundControl()),
       settingRow('Background strength', null, strengthControl()),
+      settingRow('Glass transparency', 'Choose how much of the background shows through the panels.', glassTransparencyControl()),
       settingToggle('Colors from the background', 'The whole app takes its colors from the background: the playing song’s cover, or your own picture. Off: the theme’s own colors.', 'cover_accent'),
       settingToggle('Show source icons on songs', 'Always show the YouTube Music / SoundCloud / YouTube / Spotify icons on song rows (otherwise only when you hover a song).', 'show_sources')),
     group('Lyrics', null,

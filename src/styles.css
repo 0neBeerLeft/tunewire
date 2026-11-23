@@ -1,20 +1,20 @@
 /* Tunewire. Colors, radius and fonts come from theme variables (themes/*.json);
    the values below match the built-in "Midnight" theme. */
 :root {
-  --bg: #121212;
-  --bg-elev: #181818;
-  --bg-elev-2: #202020;
-  --surface-hover: #1f1f1f;
-  --selected: #2a2a2a;
-  --border: #262626;
-  --text: #ebebeb;
-  --text-dim: #a0a0a0;
-  --text-faint: #6c6c6c;
-  --accent: #e5a54b;
-  --accent-contrast: #1a1205;
-  --accent-soft: rgba(229, 165, 75, 0.12);
+  --bg: #050505;
+  --bg-elev: #0d0d0d;
+  --bg-elev-2: #171717;
+  --surface-hover: #1d1d1d;
+  --selected: #252525;
+  --border: #2c2c2c;
+  --text: #f5f5f5;
+  --text-dim: #b4b4b4;
+  --text-faint: #777777;
+  --accent: #f5f5f5;
+  --accent-contrast: #050505;
+  --accent-soft: rgba(255, 255, 255, 0.12);
   --danger: #e5675f;
-  --warn: #e5a54b;
+  --warn: #d0d0d0;
   --ok: #6dbf8b;
   --radius: 6px;
   --font: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Cantarell, "Noto Sans", Ubuntu, sans-serif;
@@ -943,7 +943,7 @@ h2 { font-size: 20px; font-weight: 750; letter-spacing: -.01em; }
 .lib-art.round { border-radius: 50%; }
 .lib-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .lib-art.grid4 { grid-template-columns: 1fr 1fr; }
-.lib-art.liked { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 90%, #4000f0), color-mix(in srgb, var(--accent) 30%, #c4efd9)); color: #fff; }
+.lib-art.liked { background: linear-gradient(135deg, #f5f5f5, #6d6d6d); color: #080808; }
 .lib-art.liked svg.i, .lib-art.special svg.i { width: 22px; height: 22px; }
 .lib-art.special { background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2)); color: var(--text); }
 .lib-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -980,7 +980,7 @@ h2 { font-size: 20px; font-weight: 750; letter-spacing: -.01em; }
 .hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hero-art.grid4 { grid-template-columns: 1fr 1fr; }
 .hero-art svg.i { width: 64px; height: 64px; }
-.hero-art.liked { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 90%, #4000f0), color-mix(in srgb, var(--accent) 30%, #c4efd9)); color: #fff; }
+.hero-art.liked { background: linear-gradient(135deg, #f5f5f5, #6d6d6d); color: #080808; }
 .hero-art.editable { cursor: pointer; position: relative; }
 .hero-art.editable::after { content: "Choose photo"; position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); color: #fff; font-weight: 700; opacity: 0; transition: opacity .15s; }
 .hero-art.editable:hover::after { opacity: 1; }
@@ -1757,16 +1757,16 @@ body.dragging-tracks .track:hover { background: transparent; }
 
 /* App colors follow the background (explore.js: paletteVars). Registered so
    they fade from one song's colors to the next instead of jumping. */
-@property --bg { syntax: '<color>'; inherits: true; initial-value: #121212; }
-@property --bg-elev { syntax: '<color>'; inherits: true; initial-value: #181818; }
-@property --bg-elev-2 { syntax: '<color>'; inherits: true; initial-value: #202020; }
-@property --surface-hover { syntax: '<color>'; inherits: true; initial-value: #1f1f1f; }
-@property --selected { syntax: '<color>'; inherits: true; initial-value: #2a2a2a; }
-@property --border { syntax: '<color>'; inherits: true; initial-value: #262626; }
-@property --text { syntax: '<color>'; inherits: true; initial-value: #ebebeb; }
-@property --text-dim { syntax: '<color>'; inherits: true; initial-value: #a0a0a0; }
-@property --text-faint { syntax: '<color>'; inherits: true; initial-value: #6c6c6c; }
-@property --accent { syntax: '<color>'; inherits: true; initial-value: #e5a54b; }
+@property --bg { syntax: '<color>'; inherits: true; initial-value: #050505; }
+@property --bg-elev { syntax: '<color>'; inherits: true; initial-value: #0d0d0d; }
+@property --bg-elev-2 { syntax: '<color>'; inherits: true; initial-value: #171717; }
+@property --surface-hover { syntax: '<color>'; inherits: true; initial-value: #1d1d1d; }
+@property --selected { syntax: '<color>'; inherits: true; initial-value: #252525; }
+@property --border { syntax: '<color>'; inherits: true; initial-value: #2c2c2c; }
+@property --text { syntax: '<color>'; inherits: true; initial-value: #f5f5f5; }
+@property --text-dim { syntax: '<color>'; inherits: true; initial-value: #b4b4b4; }
+@property --text-faint { syntax: '<color>'; inherits: true; initial-value: #777777; }
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #f5f5f5; }
 :root { transition: --bg 1.2s ease, --bg-elev 1.2s ease, --bg-elev-2 1.2s ease, --surface-hover 1.2s ease, --selected 1.2s ease, --border 1.2s ease, --text 1.2s ease, --text-dim 1.2s ease, --text-faint 1.2s ease, --accent 1.2s ease; }
 @media (prefers-reduced-motion: reduce) { :root { transition: none; } }
 
@@ -1776,21 +1776,22 @@ body.dragging-tracks .track:hover { background: transparent; }
    so panels need no live blur of their own (cheap); the floating layers do,
    since they sit over sharp content. */
 :root {
-  --panel: color-mix(in srgb, var(--bg-elev) 42%, transparent);
-  --glass: color-mix(in srgb, var(--panel-solid) 58%, transparent);
+  --glass-transparency: 58%;
+  --panel: color-mix(in srgb, var(--bg-elev) calc(100% - var(--glass-transparency)), transparent);
+  --glass: color-mix(in srgb, var(--panel-solid) calc(100% - var(--glass-transparency)), transparent);
   --panel-border: color-mix(in srgb, var(--text) 16%, transparent);
   --panel-radius: 16px;
   --gap: 10px;
 }
 :root[data-mode="light"] {
-  --panel: color-mix(in srgb, var(--bg-elev) 56%, transparent);
-  --glass: color-mix(in srgb, var(--panel-solid) 68%, transparent);
+  --panel: color-mix(in srgb, var(--bg-elev) calc(100% - var(--glass-transparency)), transparent);
+  --glass: color-mix(in srgb, var(--panel-solid) calc(100% - var(--glass-transparency)), transparent);
   --panel-border: color-mix(in srgb, var(--text) 24%, transparent);
 }
 #ambient {
   background:
-    radial-gradient(70% 60% at 15% 12%, rgba(126, 87, 194, .28), transparent 75%),
-    radial-gradient(65% 60% at 85% 82%, rgba(38, 166, 154, .2), transparent 72%),
+    radial-gradient(72% 62% at 16% 10%, rgba(255, 255, 255, .12), transparent 76%),
+    radial-gradient(68% 62% at 88% 84%, rgba(190, 190, 190, .08), transparent 74%),
     var(--bg);
 }
 .amb-veil {
@@ -1799,8 +1800,8 @@ body.dragging-tracks .track:hover { background: transparent; }
 }
 :root[data-mode="light"] #ambient {
   background:
-    radial-gradient(70% 60% at 15% 12%, rgba(126, 87, 194, .16), transparent 75%),
-    radial-gradient(65% 60% at 85% 82%, rgba(38, 166, 154, .13), transparent 72%),
+    radial-gradient(72% 62% at 16% 10%, rgba(255, 255, 255, .6), transparent 76%),
+    radial-gradient(68% 62% at 88% 84%, rgba(0, 0, 0, .06), transparent 74%),
     var(--bg);
 }
 .sidebar, .main, .queue, .player-bar {
@@ -1835,16 +1836,14 @@ body.dragging-tracks .track:hover { background: transparent; }
 .btn.primary { box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent); }
 .track:hover, .track.menu-open, .lib-item:hover, .q-item:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
 .modal, .menu, .suggest {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--glass)), var(--glass) 160px) !important;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 8%, var(--glass)), var(--glass) 72%) !important;
   -webkit-backdrop-filter: blur(28px) saturate(1.4); backdrop-filter: blur(28px) saturate(1.4);
-  border-color: color-mix(in srgb, var(--text) 12%, transparent) !important;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, .45), inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text) 16%, transparent) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45), inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent);
 }
 .menu { background: var(--glass) !important; }
-.modal-backdrop { background: color-mix(in srgb, var(--bg) 35%, transparent); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
-/* The backdrop already blurs the app behind a dialog, so the dialog needs
-   no blur of its own (one live blur, not two); a little more body instead. */
-.modal { -webkit-backdrop-filter: none; backdrop-filter: none; --glass: color-mix(in srgb, var(--panel-solid) 80%, transparent); }
+.modal-backdrop { background: color-mix(in srgb, var(--bg) 42%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.modal { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
 
 /* Home dashboard ---------------------------------------------------------- */
@@ -1854,7 +1853,7 @@ body.dragging-tracks .track:hover { background: transparent; }
 .home-hello h1 { font-size: clamp(27px, 3vw, 36px); font-weight: 800; letter-spacing: -.035em; margin: 0; }
 
 .home-feature {
-  --feature-tint: color-mix(in srgb, var(--accent) 26%, #8c68e8);
+  --feature-tint: color-mix(in srgb, var(--accent) 35%, #777);
   isolation: isolate;
   position: relative;
   display: grid;
@@ -1881,7 +1880,7 @@ body.dragging-tracks .track:hover { background: transparent; }
   filter: blur(20px);
 }
 .home-feature::after { inset: 1px 12% auto; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 50%, transparent), transparent); }
-.home-feature.kind-discover { --feature-tint: color-mix(in srgb, #8464ee 55%, var(--accent)); }
+.home-feature.kind-discover { --feature-tint: color-mix(in srgb, #bdbdbd 65%, var(--accent)); }
 .home-feature-copy { position: relative; z-index: 1; max-width: 620px; }
 .home-feature-kicker { display: flex; align-items: center; gap: 8px; color: color-mix(in srgb, var(--text) 78%, var(--feature-tint)); font-size: 11px; font-weight: 800; letter-spacing: .16em; }
 .home-feature-kicker svg.i { width: 15px; height: 15px; color: var(--accent); }
@@ -2068,12 +2067,19 @@ body.dragging-tracks .track:hover { background: transparent; }
 .local-filter { height: 38px; border-radius: 12px; }
 
 @media (max-width: 680px) {
+  .modal-backdrop { padding: 14px; }
+  .modal header { padding: 20px 20px 12px; }
+  .modal .body { padding: 8px 20px 18px; }
+  .modal footer { padding: 14px 20px 18px; }
+  .modal-hero { padding: 20px 20px 12px; }
   .view > .page-head, .view > div > .page-head:first-child { padding: 16px; border-radius: 14px; }
   #view-charts .artist-section, #releases-body > .album-grid, #stats-body > .home-block:not(:has(> .track-list)), #view-history .track-list,
   #view-downloads .track-list, #view-local .track-list, #view-playlist .track-list, #view-favorites .track-list,
   #view-mix .track-list, #view-album .track-list, #search-body .track-list, #stats-body > .stat-strip.big,
   #stats-body > .home-block:has(.bar-chart), #stats-body .stats-two > .home-block, .search-home-block { padding: 14px; border-radius: 14px; }
   .view .hero { padding: 24px 18px; min-height: auto; border-radius: 18px; }
+  .suggest { left: -6px; right: -6px; max-height: min(62vh, 460px); padding: 6px; border-radius: 15px; }
+  .suggest-item.rich { height: 56px; }
   .view .action-bar { gap: 10px; padding: 12px; border-radius: 14px; }
   .album-grid, .browse-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 16px 12px; }
   .browse-tile { height: 112px; font-size: 17px; }
@@ -2083,3 +2089,77 @@ body.dragging-tracks .track:hover { background: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .album-card, .chart-artist, .top-artist, .lib-item, .track-list .track, .recent-card { transition: none; }
 }
+
+/* Monochrome glass interactions ------------------------------------------- */
+button:not(:disabled):hover, button:active { transform: none !important; }
+.btn:not(.primary):not(.danger):not(:disabled):hover,
+.icon-btn:hover, .tb-home:hover, .tb-nav:hover:not(:disabled), .tb-btn:hover,
+.nav-item:hover, .side-playlists button:hover, .panel-tabs button:hover,
+.lib-chips button:hover, .search-chips button:hover, .chip-btn:hover,
+.plugin-panel button:hover, .recent-searches button:hover, .shortcut:hover,
+.search-browse:hover, .lib-sort:hover, .search-clear:hover, .ab-icon:hover,
+.ab-follow:hover, .mix-play:hover, .tile-play:hover, .reactions-bar button:hover {
+  color: var(--text);
+  background-color: color-mix(in srgb, var(--text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--text) 26%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  filter: none;
+}
+.btn.primary:hover, .play-btn:hover, .big-play:hover { background-color: #fff; color: #050505; border-color: #fff; filter: none; }
+:root { --accent: #f5f5f5; --accent-contrast: #050505; --accent-soft: rgba(255,255,255,.12); }
+:root[data-mode="light"] { --accent: #111; --accent-contrast: #fff; --accent-soft: rgba(0,0,0,.1); }
+.home-feature { --feature-tint: #858585; }
+.home-feature.kind-discover { --feature-tint: #bdbdbd; }
+.home-block:has(> .track-list), .home-block:has(.stat-strip), .search-home-block,
+#view-charts .artist-section, #releases-body > .album-grid,
+#stats-body > .home-block:not(:has(> .track-list)), #stats-body > .home-block:has(.bar-chart),
+#stats-body .stats-two > .home-block, #view-history .track-list, #view-downloads .track-list,
+#view-local .track-list, #view-playlist .track-list, #view-favorites .track-list,
+#view-mix .track-list, #view-album .track-list, #search-body .track-list,
+#stats-body > .stat-strip.big, .card, .stat-card, .theme-card, .search-home-block {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 6%, transparent), var(--panel));
+}
+.modal {
+  --glass: color-mix(in srgb, var(--panel-solid) calc(100% - var(--glass-transparency)), transparent);
+  width: min(520px, 100%);
+  max-height: min(86vh, 820px);
+  overflow: hidden;
+  border-radius: 20px;
+  border-color: color-mix(in srgb, var(--text) 20%, transparent) !important;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 9%, var(--glass)), var(--glass) 72%) !important;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .56), 0 4px 18px rgba(0, 0, 0, .2), inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+}
+.modal header { padding: 24px 26px 14px; }
+.modal header h2 { font-size: 19px; line-height: 1.25; letter-spacing: -.025em; }
+.modal header p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
+.modal .body { padding: 10px 26px 20px; }
+.modal footer { padding: 16px 26px 22px; gap: 8px; border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+.modal footer .btn { height: 36px; padding-inline: 16px; border-radius: 999px; }
+.modal .btn.primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent); }
+.modal-hero { padding: 22px 26px 12px; }
+.modal-hero .art { width: 64px; height: 64px; border-radius: 12px; }
+.modal-backdrop { padding: 24px; }
+.suggest {
+  max-height: min(68vh, 520px);
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 8%, var(--glass)), var(--glass)) !important;
+  border-color: color-mix(in srgb, var(--text) 20%, transparent) !important;
+  box-shadow: 0 24px 56px rgba(0,0,0,.42), inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+}
+.suggest-item { height: 40px; padding: 0 10px; gap: 12px; border: 1px solid transparent; border-radius: 11px; transition: background-color .12s ease, border-color .12s ease; }
+.suggest-item.rich { height: 62px; padding: 0 8px; }
+.suggest-item:hover, .suggest-item.active { background: color-mix(in srgb, var(--text) 12%, transparent); border-color: color-mix(in srgb, var(--text) 14%, transparent); }
+.suggest-item.active { box-shadow: inset 2px 0 0 var(--text); }
+.suggest-item .ico { width: 18px; }
+.suggest-item .ico svg.i { width: 15px; height: 15px; }
+.suggest-item .s-art { width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+.suggest-item .s-art.round { border-radius: 50%; }
+.suggest-item .s-title { font-size: 13px; font-weight: 650; }
+.suggest-item .s-sub { margin-top: 3px; font-size: 11.5px; }
+.suggest-item .icon-btn { opacity: .55; }
+.suggest-item:hover .icon-btn, .suggest-item.active .icon-btn { opacity: 1; }
+.suggest-sep { margin: 7px 10px; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.suggest-item .s-play { width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.suggest-item:hover .s-play, .suggest-item.active .s-play { color: var(--text); background: color-mix(in srgb, var(--text) 18%, transparent); }

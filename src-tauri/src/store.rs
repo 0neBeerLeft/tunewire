@@ -89,6 +89,8 @@ pub struct Settings {
     pub background: String,
     /// 0-100: how visible the background is behind the panels.
     pub background_strength: u32,
+    /// 0-80: transparency of the app's glass surfaces.
+    pub glass_transparency: u32,
     /// Picture for background = "image".
     pub background_image: String,
     /// Shuffle mode (the queue's original order is kept to turn it off again).
@@ -158,11 +160,12 @@ impl Default for Settings {
             eq_enabled: false,
             eq_gains: vec![0.0; 10],
             output_device: String::new(),
-            cover_accent: true,
+            cover_accent: false,
             charts_country: "ZZ".into(),
             search_history: Vec::new(),
             background: "art".into(),
             background_strength: 45,
+            glass_transparency: 58,
             background_image: String::new(),
             shuffle: false,
             show_sources: false,
@@ -208,6 +211,7 @@ impl Settings {
         }
         self.search_history.truncate(30);
         self.background_strength = self.background_strength.min(100);
+        self.glass_transparency = self.glass_transparency.min(80);
         if !matches!(self.background.as_str(), "art" | "tint" | "image" | "plain") {
             self.background = "art".into();
         }

@@ -49,7 +49,7 @@
     spotify_backend: 'auto', include_spotify_in_all: true, spotify_client_id: '', spotify_client_secret: '',
     normalize: true, crossfade: 0, lyrics: true, local_folders: ['/home/you/Music'], downloads_dir: '', ytdlp_source: 'system',
     auto_update: false, discord_rpc: false, discord_client_id: '', discord_buttons: true, repeat: 'off', example_plugin_installed: true,
-    autoplay: true, eq_enabled: false, eq_gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], output_device: '', cover_accent: true, charts_country: 'ZZ', search_history: ['daft punk', 'tame impala'], background: 'art', background_strength: 45, background_image: '',
+    autoplay: true, eq_enabled: false, eq_gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], output_device: '', cover_accent: false, charts_country: 'ZZ', search_history: ['daft punk', 'tame impala'], background: 'art', background_strength: 45, glass_transparency: 58, background_image: '',
   };
   const mix = (id, kind, title, subtitle, ts) => ({ id, kind, title, subtitle, covers: ts.map((t) => t.thumbnail).filter(Boolean).slice(0, 4), tracks: ts });
   const forYou = (stale) => ({

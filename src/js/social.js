@@ -413,6 +413,7 @@ async function joinCollaborative(code) {
 // over, remove people and approve suggested songs. Presence and reactions
 // use a private Realtime channel only members can join.
 const REACTIONS = ['🔥', '❤️', '😂', '🕺', '👏', '😮'];
+const REACTION_NAMES = { '🔥': 'Fire', '❤️': 'Love', '😂': 'Haha', '🕺': 'Dance', '👏': 'Clap', '😮': 'Wow' };
 const freshJam = () => ({
   code: null, row: null, host: false, channel: null, live: null, people: [], names: new Map(),
   chat: [], suggestions: [], votes: new Map(), remote: null, remoteAt: 0, applying: false,
@@ -510,9 +511,8 @@ async function openJam(code) {
   jam.live.on('status', (s) => { if (s === 'live') refreshJam(); });
   await refreshJam();
   jam.timers.push(setInterval(() => { if (jam.host) publishJamState(false); else checkJamQuality(); }, 4000));
-  setPanelOpen(true);
-  showPanel('now');
   paintJamButton();
+  openJamDock();
 }
 
 /** Everything about the session, fetched (start, reconnect). */
@@ -737,15 +737,39 @@ async function sendChat(text) {
   try { await db('POST', 'jam_events', { code: jam.code, kind: 'chat', payload: { text: t } }); } catch (e) { toast(errMsg(e), 'error'); }
 }
 
-function sendReaction(emoji) {
+function sendReaction(emoji, btn) {
   if (!REACTIONS.includes(emoji)) return;
   jam.channel?.broadcast('react', { emoji, from: cloud.session.name.slice(0, 40) });
-  floatReaction(emoji, 'You');
+  if (btn) { btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
+  floatReaction(emoji, 'You', btn);
 }
-function floatReaction(emoji, from) {
-  const el = h('div', { class: 'reaction', 'aria-hidden': 'true' }, emoji, h('small', {}, from));
-  el.style.left = `${55 + Math.random() * 30}%`;
+
+/**
+ * A reaction rising from where it was sent (your button, or the session panel
+ * for other people's), swaying and tilting, with a small burst of mini copies
+ * and the sender's name. Transform/opacity only; removed when done.
+ */
+function floatReaction(emoji, from, origin = null) {
+  const src = origin || $('#jam-dock:not([hidden])') || $('#btn-jam');
+  const r = src?.getBoundingClientRect();
+  const x = r ? r.left + r.width / 2 + (origin ? 0 : (Math.random() - 0.5) * Math.min(160, r.width * 0.6)) : window.innerWidth * 0.75;
+  const y = r ? (origin ? r.top : r.top + Math.min(r.height * 0.5, 160)) : window.innerHeight - 140;
+  const el = h('div', { class: 'reaction', 'aria-hidden': 'true' }, emojiEl(emoji), h('small', {}, from));
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  el.style.setProperty('--dx', `${(Math.random() - 0.5) * 90}px`);
+  el.style.setProperty('--rot', `${(Math.random() - 0.5) * 30}deg`);
   document.body.append(el);
+  for (let i = 0; i < 4; i++) {
+    const m = h('span', { class: 'reaction-mini', 'aria-hidden': 'true' }, emojiEl(emoji));
+    m.style.left = `${x}px`;
+    m.style.top = `${y}px`;
+    const a = (-Math.PI / 2) + (i - 1.5) * 0.55 + (Math.random() - 0.5) * 0.3;
+    m.style.setProperty('--mx', `${Math.cos(a) * (46 + Math.random() * 26)}px`);
+    m.style.setProperty('--my', `${Math.sin(a) * (46 + Math.random() * 26)}px`);
+    document.body.append(m);
+    setTimeout(() => m.remove(), 900);
+  }
   setTimeout(() => el.remove(), 2600);
 }
 
@@ -822,7 +846,6 @@ function dockJam() {
     if (panel.parentElement !== dock) dock.append(panel);
     panel.hidden = false;
     dock.hidden = false;
-    $('#app').classList.add('jam-docked');
     $('#jam-dock-count').textContent = `· ${Math.max(1, jam.people.length)}`;
     renderTogether();
   } else {
@@ -830,16 +853,19 @@ function dockJam() {
     if (panel.parentElement !== home) home.append(panel);
     panel.hidden = true;
     dock.hidden = true;
-    $('#app').classList.remove('jam-docked');
+    $('#app').classList.remove('jam-open');
   }
   if (state.view === 'together') renderTogetherLanding();
 }
 
+/** Show the session panel in the right column (in place of the song panel). */
 function openJamDock() {
+  if (!jam.code) return;
   setPanelOpen(true);
-  if (!['now', 'queue', 'lyrics'].includes(state.panel)) showPanel('now');
-  $('#jam-dock')?.scrollIntoView({ block: 'nearest' });
+  $('#app').classList.add('jam-open');
+  renderTogether();
 }
+function closeJamDock() { $('#app').classList.remove('jam-open'); }
 
 /** The Listen together page: a landing, or your session's summary. */
 async function renderTogetherLanding() {
@@ -851,7 +877,7 @@ async function renderTogetherLanding() {
     box.replaceChildren(h('div', { class: 'jt-live' },
       h('div', { class: 'jt-live-top' }, h('span', { class: 'live-dot' }), h('b', {}, jam.host ? 'You’re hosting a session' : 'You’re in a session'), h('span', { class: 'meta' }, `${n} ${n === 1 ? 'person' : 'people'}`)),
       h('div', { class: 'jt-faces' }, ...jam.people.slice(0, 8).map((p) => avatarEl(p.avatar, p.name, 'avatar'))),
-      h('p', { class: 'muted' }, 'The session is open in the side panel, next to the song: chat, suggestions and votes are there.'),
+      h('p', { class: 'muted' }, 'Chat, suggestions and votes are in the session panel on the right.'),
       h('div', { class: 'actions' },
         h('button', { class: 'btn primary', html: `${icon('expand')}Show the session`, onclick: openJamDock }),
         h('button', { class: 'btn', html: `${icon('link')}Copy invite link`, onclick: () => { copyText(JAM_LINK(jam.code)); toast('Invite link copied', 'ok', 1500); } }),
@@ -893,8 +919,9 @@ async function renderTogetherLanding() {
   } catch (e) { live.replaceChildren(h('p', { class: 'muted' }, errMsg(e))); }
 }
 
-$('#btn-jam')?.addEventListener('click', () => (jam.code ? openJamDock() : startJam()));
+$('#btn-jam')?.addEventListener('click', () => (!jam.code ? startJam() : $('#app').classList.contains('jam-open') ? closeJamDock() : openJamDock()));
 $('#jam-dock-page')?.addEventListener('click', () => showView('together'));
+$('#jam-dock-close')?.addEventListener('click', closeJamDock);
 
 const QUALITY = {
   waiting: ['Waiting for the host to play something…', ''],
@@ -906,8 +933,8 @@ const QUALITY = {
 
 function renderTogether() {
   const box = $('#together-panel');
-  // Only where it's visible: docked beside the song.
-  if (!box || box.hidden || !box.closest('#jam-dock')) return;
+  // Only where it's visible: the session panel.
+  if (!box || box.hidden || !box.closest('#jam-dock') || !$('#app').classList.contains('jam-open')) return;
   if (!jam.code) {
     box.replaceChildren(h('div', { class: 'empty' },
       h('p', {}, 'Listen together'),
@@ -929,7 +956,7 @@ function renderTogether() {
   const votes = skipVotes();
 
   const chatList = h('div', { class: 'jam-chat', role: 'log', 'aria-live': 'polite', 'aria-label': 'Session chat' },
-    ...jam.chat.slice(-50).map((c) => h('div', { class: `chat-line${c.user_id === me() ? ' mine' : ''}` }, h('b', {}, nameOf(c.user_id)), ' ', c.payload?.text || '')));
+    ...jam.chat.slice(-50).map((c) => h('div', { class: `chat-line${c.user_id === me() ? ' mine' : ''}` }, h('b', {}, nameOf(c.user_id)), ' ', ...emojify(c.payload?.text || ''))));
   // One input per session: re-rendering the panel keeps what's being typed.
   if (!jam.input) {
     jam.input = h('input', { class: 'input', placeholder: 'Say something…', maxlength: 300, 'aria-label': 'Chat message' });
@@ -966,7 +993,7 @@ function renderTogether() {
         h('button', { class: 'btn small primary', onclick: () => answerSuggestion(s, true) }, 'Add'),
         h('button', { class: 'btn small', onclick: () => answerSuggestion(s, false) }, 'Pass')))) : null,
     h('div', { class: 'jam-hint meta' }, jam.host ? 'Guests follow what you play. Songs they suggest show up here.' : 'Suggest songs with ⋯ → Suggest for the session. The host controls playback.'),
-    h('div', { class: 'reactions-bar', role: 'group', 'aria-label': 'Reactions' }, ...REACTIONS.map((e) => h('button', { 'aria-label': `React ${e}`, onclick: () => sendReaction(e) }, e))),
+    h('div', { class: 'reactions-bar', role: 'group', 'aria-label': 'Reactions' }, ...REACTIONS.map((e) => h('button', { class: 'react-btn', title: REACTION_NAMES[e], 'aria-label': `React: ${REACTION_NAMES[e]}`, onclick: (ev) => sendReaction(e, ev.currentTarget) }, emojiEl(e)))),
     chatList,
     input].filter(Boolean));
   chatList.scrollTop = chatList.scrollHeight;

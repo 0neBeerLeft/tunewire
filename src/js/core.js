@@ -118,6 +118,31 @@ function claimAnalyzer(who, on) {
   if (now !== before && window.__TAURI__) call('analyzer_enable', { on: now }).catch(() => {});
 }
 
+// Emoji: Microsoft's Fluent 3D emoji (MIT licence), bundled in img/emoji for
+// the ones the app uses and common chat emoji; anything else stays text.
+const EMOJI_FILES = { "🛠": "tools", "🌱": "seedling", "🤝": "handshake", "📀": "dvd", "🎧": "headphone", "💌": "love-letter", "🔥": "fire", "☄": "comet", "🦉": "owl", "🐦": "bird", "🧭": "compass", "❤": "red-heart", "😂": "tears-of-joy", "🕺": "dancing", "👏": "clapping", "😮": "open-mouth", "🥇": "medal-1", "🥈": "medal-2", "🥉": "medal-3", "😀": "grinning", "😃": "grinning-big", "😄": "grinning-smile", "😁": "beaming", "😆": "squinting", "😅": "sweat-smile", "🤣": "rofl", "😊": "blush", "😍": "heart-eyes", "🥰": "smiling-hearts", "😘": "kiss", "😎": "sunglasses", "🤩": "star-struck", "🥳": "partying", "😭": "sob", "😢": "cry", "🤔": "thinking", "🙄": "rolling-eyes", "😴": "sleeping", "🤯": "exploding-head", "😱": "scream", "👍": "thumbs-up", "👎": "thumbs-down", "🙌": "raising-hands", "🙏": "folded-hands", "💯": "100", "✨": "sparkles", "🎉": "party-popper", "🎶": "notes", "🎵": "note", "💀": "skull", "👀": "eyes", "💔": "broken-heart", "💜": "purple-heart", "🖤": "black-heart", "🤍": "white-heart" };
+const EMOJI_RE = /\p{Extended_Pictographic}\uFE0F?/gu;
+
+/** One emoji as its picture (or as text when there's no picture for it). */
+function emojiEl(e, cls = '') {
+  const file = EMOJI_FILES[e.replace(/\uFE0F/g, '')];
+  if (!file) return h('span', { class: `emoji ${cls}`.trim() }, e);
+  return h('img', { class: `emoji-img ${cls}`.trim(), src: `img/emoji/${file}.webp`, alt: e, draggable: 'false', decoding: 'async' });
+}
+
+/** Text with its emoji as pictures: a list of text and image nodes. */
+function emojify(text) {
+  const out = [];
+  let last = 0;
+  for (const m of String(text ?? '').matchAll(EMOJI_RE)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(emojiEl(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < String(text ?? '').length) out.push(String(text).slice(last));
+  return out;
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -644,6 +669,7 @@ function panelOpen() {
 }
 function setPanelOpen(open) {
   const app = $('#app');
+  if (!open) app.classList.remove('jam-open');
   if (window.innerWidth <= 1200) app.classList.toggle('queue-open', open);
   else app.classList.toggle('queue-hidden', !open);
   try { localStorage.setItem('tw-panel-open', open ? '1' : '0'); } catch { /* optional */ }

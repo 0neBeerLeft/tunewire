@@ -34,6 +34,9 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - A new sleep timer with a live countdown, presets and any length you like
 - Page titles sit flat on the page; quieter song-list headers; pill-style source and range switches
 
+- Emoji everywhere (reactions, badges, the leaderboard, chat) are crisp 3D Fluent emoji; reactions float up from where they're sent
+- Listen together opens as its own panel in the right column; the Together button or × switches back to the song
+
 **And more**
 - Stars and Snow backgrounds redrawn: depth, twinkling and shooting stars, soft drifting snow; visible under the whole app, and lighter on the GPU
 - The player bar is a floating glass dock

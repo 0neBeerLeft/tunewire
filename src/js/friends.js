@@ -33,7 +33,7 @@ function badgeRow(ids, { max = 20, small = false } = {}) {
   const shown = (ids || []).filter((b) => BADGES[b]).slice(0, max);
   if (!shown.length) return null;
   return h('div', { class: `badges${small ? ' small' : ''}`, role: 'list', 'aria-label': 'Badges' },
-    ...shown.map((b) => h('span', { class: 'badge', role: 'listitem', title: `${BADGES[b].label}: ${BADGES[b].desc}` }, h('span', { class: 'b-ico', 'aria-hidden': 'true' }, BADGES[b].icon), small ? null : h('span', {}, BADGES[b].label))));
+    ...shown.map((b) => h('span', { class: 'badge', role: 'listitem', title: `${BADGES[b].label}: ${BADGES[b].desc}` }, h('span', { class: 'b-ico', 'aria-hidden': 'true' }, emojiEl(BADGES[b].icon)), small ? null : h('span', {}, BADGES[b].label))));
 }
 
 // Avatars with Discord decorations ----------------------------------------------------
@@ -202,9 +202,10 @@ async function renderInbox(box) {
   if (!rows.length) { box.replaceChildren(h('div', { class: 'empty' }, h('p', {}, 'No songs yet'), h('p', { class: 'small' }, 'When friends send you a song, it shows up here. Send one with ⋯ → Send to a friend.'))); return; }
   box.replaceChildren(...rows.map((r) => {
     const t = fromCloudTrack(r.track);
-    const react = h('div', { class: 'inbox-react' }, ...INBOX_REACTIONS.map((e) => h('button', { class: r.reaction === e ? 'on' : '', 'aria-label': `React ${e}`, onclick: async (ev) => {
-      try { await db('PATCH', `song_shares?id=eq.${r.id}`, { reaction: r.reaction === e ? null : e }); r.reaction = r.reaction === e ? null : e; ev.currentTarget.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.textContent === r.reaction)); } catch (er) { toast(errMsg(er), 'error'); }
-    } }, e)));
+    const react = h('div', { class: 'inbox-react' }, ...INBOX_REACTIONS.map((e) => h('button', { class: r.reaction === e ? 'on' : '', 'data-emoji': e, 'aria-label': `React ${e}`, onclick: async (ev) => {
+      const btn = ev.currentTarget; // gone once the await below returns
+      try { await db('PATCH', `song_shares?id=eq.${r.id}`, { reaction: r.reaction === e ? null : e }); r.reaction = r.reaction === e ? null : e; btn.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.emoji === r.reaction)); } catch (er) { toast(errMsg(er), 'error'); }
+    } }, emojiEl(e))));
     return h('div', { class: `inbox-item${r.read ? '' : ' unread'}` },
       h('div', { class: 'inbox-from' }, decoratedAvatar(r.sender?.avatar, r.sender?.name, r.sender?.decoration, 'avatar'), h('button', { class: 'friend-name', onclick: () => openProfile(r.from_user) }, r.sender?.name || 'Someone'), h('span', { class: 'meta' }, timeAgo(Date.parse(r.created_at)))),
       r.note ? h('p', { class: 'inbox-note' }, r.note) : null,
@@ -233,13 +234,13 @@ async function renderLeaderboard(box) {
   }
   const top = rows[0]?.week_minutes || 1;
   box.replaceChildren(intro, ...rows.map((r, i) => h('div', { class: `lb-row${r.user_id === cloud.session.user_id ? ' me' : ''}` },
-    h('span', { class: `lb-rank r${i + 1}` }, i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1)),
+    h('span', { class: `lb-rank r${i + 1}` }, i < 3 ? emojiEl(['🥇', '🥈', '🥉'][i]) : String(i + 1)),
     decoratedAvatar(r.avatar, r.name, r.decoration),
     h('div', { class: 'grow min-w-0' },
       h('button', { class: 'friend-name', onclick: () => openProfile(r.user_id) }, r.user_id === cloud.session.user_id ? `${r.name} (you)` : r.name),
       h('div', { class: 'lb-bar' }, h('i', { style: `width:${Math.max(3, (r.week_minutes / top) * 100)}%` }))),
     h('span', { class: 'lb-min' }, `${r.week_minutes.toLocaleString()} min`),
-    r.streak >= 3 ? h('span', { class: 'lb-streak', title: `${r.streak}-day streak` }, `🔥${r.streak}`) : null)));
+    r.streak >= 3 ? h('span', { class: 'lb-streak', title: `${r.streak}-day streak` }, emojiEl('🔥'), String(r.streak)) : null)));
 }
 
 // Shared listening stats --------------------------------------------------------------------------

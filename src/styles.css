@@ -1947,3 +1947,139 @@ body.dragging-tracks .track:hover { background: transparent; }
   .home-feature-actions .btn:not(.primary) { display: none; }
   .shortcut-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Shared glass layouts ----------------------------------------------------- */
+.view > .page-head, .view > div > .page-head:first-child {
+  padding: 18px 22px;
+  margin: 0 0 22px;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(125deg, color-mix(in srgb, var(--text) 8%, transparent), color-mix(in srgb, var(--panel-solid) 34%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent), 0 14px 34px rgba(0, 0, 0, .12);
+}
+.view > .page-head h1, .view > div > .page-head:first-child h1 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.035em; }
+#charts-body .page-head, #releases-body .page-head, #stats-body .page-head, #view-search .page-head { flex-wrap: wrap; }
+#view-search .page-head, #view-downloads > .page-head, #view-local > .page-head { padding: 16px 20px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 16px; background: linear-gradient(125deg, color-mix(in srgb, var(--text) 8%, transparent), color-mix(in srgb, var(--panel-solid) 34%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent), 0 14px 34px rgba(0, 0, 0, .12); }
+#view-charts .artist-section, #releases-body > .album-grid,
+#stats-body > .home-block:not(:has(> .track-list)), #view-history .track-list {
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 5%, transparent), color-mix(in srgb, var(--panel-solid) 28%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12);
+}
+#view-charts .artist-section { margin-bottom: 20px; }
+#view-charts .artist-section > .section-title,
+#stats-body .home-block > .section-title,
+#view-releases .section-title { margin: 0 0 14px; }
+.album-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 20px 18px; }
+.album-card { padding: 9px; margin: -9px; border-radius: 14px; transition: transform .18s var(--ease-out), background .18s ease, box-shadow .18s ease; }
+.album-card:hover { transform: translateY(-3px); background: color-mix(in srgb, var(--text) 8%, transparent); box-shadow: 0 12px 28px rgba(0, 0, 0, .16); }
+.album-art { border-radius: 12px; box-shadow: 0 10px 24px rgba(0, 0, 0, .22); }
+.album-title { margin: 9px 2px 0; font-size: 13px; font-weight: 650; }
+.album-sub { margin: 3px 2px 0; font-size: 12.5px; }
+.chart-artists { gap: 6px 12px; }
+.chart-artist { height: 58px; padding: 0 12px; border: 1px solid transparent; border-radius: 12px; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
+.chart-artist:hover { border-color: color-mix(in srgb, var(--text) 13%, transparent); background: color-mix(in srgb, var(--text) 7%, transparent); transform: translateY(-1px); }
+.chart-artist .rank { width: 28px; font-size: 14px; font-weight: 750; }
+.chart-artist .thumb { width: 42px; height: 42px; }
+.followed-chips { gap: 8px; margin-bottom: 20px; }
+.followed-chips .chip { height: 32px; border-color: color-mix(in srgb, var(--text) 18%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--panel-solid) 34%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent); }
+.followed-chips .chip-name { padding-left: 14px; font-weight: 600; }
+
+#stats-body > .stat-strip.big { padding: 18px; margin-bottom: 22px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 18px; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--panel-solid) 30%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent), 0 16px 38px rgba(0, 0, 0, .14); }
+#stats-body .stat-strip.big .stat-card { min-height: 96px; padding: 18px; border-radius: 14px; }
+#stats-body .stat-strip.big .stat-card b { font-size: clamp(22px, 2.5vw, 30px); }
+#stats-body > .home-block:has(.bar-chart), #stats-body .stats-two > .home-block { padding: 18px; border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--text) 5%, transparent), color-mix(in srgb, var(--panel-solid) 26%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12); }
+#stats-body .bar-chart, #stats-body .hour-chart, #stats-body .day-chart { padding: 16px; border: 1px solid color-mix(in srgb, var(--text) 10%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--panel-solid) 22%, transparent); }
+#stats-body .top-artist { padding: 12px 8px; border: 1px solid transparent; border-radius: 14px; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+#stats-body .top-artist:hover { border-color: color-mix(in srgb, var(--text) 14%, transparent); background: color-mix(in srgb, var(--text) 6%, transparent); transform: translateY(-2px); }
+#stats-body .ta-img { box-shadow: 0 10px 28px rgba(0, 0, 0, .25), 0 0 0 3px color-mix(in srgb, var(--text) 10%, transparent); }
+#stats-body .ta-rank { border-color: var(--panel-solid); }
+#stats-body .platform-split { padding: 16px; border: 1px solid color-mix(in srgb, var(--text) 10%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--panel-solid) 22%, transparent); }
+
+#view-history .track-list, #view-downloads .track-list, #view-local .track-list,
+#view-playlist .track-list, #view-favorites .track-list, #view-mix .track-list, #view-album .track-list,
+#search-body .track-list {
+  margin-top: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 5%, transparent), color-mix(in srgb, var(--panel-solid) 26%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12);
+}
+#view-history .track, #view-downloads .track, #view-local .track,
+#view-playlist .track, #view-favorites .track, #view-mix .track, #view-album .track { border-radius: 10px; }
+#view-history .table-head, #view-downloads .table-head, #view-local .table-head,
+#view-playlist .table-head, #view-favorites .table-head, #view-mix .table-head, #view-album .table-head {
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  border-radius: 10px 10px 0 0;
+  backdrop-filter: blur(14px);
+}
+.track-list .track { transition: background .14s ease, transform .14s ease; }
+.track-list .track:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+
+.view .hero {
+  margin: 0;
+  padding: 38px 30px 26px;
+  min-height: 270px;
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border-radius: 22px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--hero, #535353) 78%, transparent), color-mix(in srgb, var(--panel-solid) 62%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent), 0 18px 46px rgba(0, 0, 0, .2);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  backdrop-filter: blur(16px) saturate(130%);
+}
+.view .hero-art { border: 1px solid color-mix(in srgb, #fff 20%, transparent); border-radius: 16px; box-shadow: 0 18px 42px rgba(0,0,0,.36), 0 0 0 5px color-mix(in srgb, #fff 7%, transparent); }
+.view .hero-art.round { border-radius: 50%; }
+.view .action-bar { margin: 10px 0 20px; padding: 16px 20px; border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 18px; background: linear-gradient(110deg, color-mix(in srgb, var(--text) 6%, transparent), color-mix(in srgb, var(--panel-solid) 30%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent); }
+.view .sticky-head { top: -20px; margin: -20px 0 -64px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 0 0 16px 16px; background: color-mix(in srgb, var(--panel-solid) 72%, transparent); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); }
+#view-downloads > .meta, #view-local > .meta { display: block; margin: -8px 4px 12px; }
+#view-local .local-filter { display: block; }
+#view-local .folder-list + .local-filter { margin-top: 8px; }
+#view-charts .empty, #view-releases .empty, #view-stats .empty, #view-history .empty,
+#view-search .empty, #view-downloads .empty, #view-local .empty, #view-favorites .empty {
+  margin: 18px 0;
+  padding: 34px 22px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--text) 6%, transparent), color-mix(in srgb, var(--panel-solid) 28%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12);
+}
+
+#search-home, #search-body { max-width: 1440px; margin: 0 auto; }
+.search-home-block { padding: 18px; margin-bottom: 20px; border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--text) 5%, transparent), color-mix(in srgb, var(--panel-solid) 26%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 14px 36px rgba(0, 0, 0, .12); }
+.search-home-block > .section-title { margin: 0 0 14px; }
+.search-chips { background: color-mix(in srgb, var(--panel-solid) 64%, transparent); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-radius: 18px; padding: 10px 12px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), 0 10px 28px rgba(0, 0, 0, .12); }
+.recent-cards { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.recent-card { border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: 12px; background: linear-gradient(120deg, color-mix(in srgb, var(--text) 8%, transparent), color-mix(in srgb, var(--panel-solid) 28%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent); transition: transform .16s var(--ease-out), border-color .16s ease, background .16s ease; }
+.recent-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 38%, transparent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.browse-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+.browse-tile { height: 138px; border: 1px solid color-mix(in srgb, #fff 24%, transparent); border-radius: 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 14px 30px rgba(0,0,0,.2); }
+.browse-tile img { width: 110px; height: 110px; border-radius: 10px; box-shadow: 0 10px 26px rgba(0,0,0,.35); }
+.top-card { border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); background: linear-gradient(145deg, color-mix(in srgb, var(--text) 8%, transparent), color-mix(in srgb, var(--panel-solid) 30%, transparent)); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent), 0 16px 36px rgba(0,0,0,.14); }
+.top-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 38%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+
+.lib-item { border: 1px solid transparent; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
+.lib-item:hover { border-color: color-mix(in srgb, var(--text) 12%, transparent); transform: translateX(2px); }
+.lib-item.active { border-color: color-mix(in srgb, var(--accent) 22%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.folder-list { border-color: color-mix(in srgb, var(--text) 16%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--panel-solid) 28%, transparent); overflow: hidden; }
+.folder { min-height: 38px; border-color: color-mix(in srgb, var(--text) 10%, transparent); }
+.local-filter { height: 38px; border-radius: 12px; }
+
+@media (max-width: 680px) {
+  .view > .page-head, .view > div > .page-head:first-child { padding: 16px; border-radius: 14px; }
+  #view-charts .artist-section, #releases-body > .album-grid, #stats-body > .home-block:not(:has(> .track-list)), #view-history .track-list,
+  #view-downloads .track-list, #view-local .track-list, #view-playlist .track-list, #view-favorites .track-list,
+  #view-mix .track-list, #view-album .track-list, #search-body .track-list, #stats-body > .stat-strip.big,
+  #stats-body > .home-block:has(.bar-chart), #stats-body .stats-two > .home-block, .search-home-block { padding: 14px; border-radius: 14px; }
+  .view .hero { padding: 24px 18px; min-height: auto; border-radius: 18px; }
+  .view .action-bar { gap: 10px; padding: 12px; border-radius: 14px; }
+  .album-grid, .browse-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 16px 12px; }
+  .browse-tile { height: 112px; font-size: 17px; }
+  .browse-tile img { width: 82px; height: 82px; }
+  .recent-cards { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .album-card, .chart-artist, .top-artist, .lib-item, .track-list .track, .recent-card { transition: none; }
+}

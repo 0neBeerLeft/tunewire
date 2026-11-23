@@ -210,19 +210,54 @@ async function setDevice(id) {
 }
 
 // Sleep timer
-$('#btn-sleep').addEventListener('click', (e) => {
-  const at = state.playback?.sleep_at;
+// A popover: the live countdown (with +15 min and Turn off) while a timer
+// runs, preset chips, and a slider for any length.
+$('#btn-sleep').addEventListener('click', (e) => openSleepTimer(e.currentTarget));
+function openSleepTimer(anchor) {
+  if (openMenuEl?.classList.contains('sleep-pop')) { closeMenu(); return; }
+  closeMenu();
   const set = (minutes, endOfTrack = false) => call('set_sleep_timer', { minutes, endOfTrack }).then((r) => {
-    toast(r == null ? 'Sleep timer off' : r === 0 ? 'Playback will stop at the end of this song' : `Sleep timer: ${minutes} minutes`, 'ok', 2000);
-  });
-  openMenu(e.currentTarget, [
-    { label: at != null ? (at === 0 ? 'Stops at the end of this song' : `Stops in ${Math.max(1, Math.round((at - Date.now()) / 60000))} min`) : 'Sleep timer', heading: true },
-    ...[5, 10, 15, 30, 45, 60, 90].map((m) => ({ label: m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : '1.5 hours', onClick: () => set(m) })),
-    { label: 'End of song', onClick: () => set(null, true) },
-    at != null ? 'sep' : null,
-    at != null ? { label: 'Turn off timer', icon: 'x', onClick: () => set(null) } : null,
-  ].filter(Boolean));
-});
+    if (state.playback) state.playback.sleep_at = r == null ? null : r === 0 ? 0 : Date.now() + minutes * 60000;
+    toast(r == null ? 'Sleep timer off' : r === 0 ? 'Playback will stop at the end of this song' : `Sleep timer: ${fmtLen(minutes)}`, 'ok', 2000);
+    paintSleep(); paint();
+  }).catch((err) => toast(errMsg(err), 'error'));
+  const fmtLen = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
+  const status = h('div', { class: 'sp-status' });
+  const chips = h('div', { class: 'sp-chips' }, ...[15, 30, 45, 60, 90].map((m) => h('button', { onclick: () => set(m) }, fmtLen(m))),
+    h('button', { onclick: () => set(null, true) }, 'End of song'));
+  const val = h('b', {}, '20 min');
+  const range = h('input', { type: 'range', min: 5, max: 180, step: 5, value: 20, 'aria-label': 'Minutes' });
+  const fill = () => { val.textContent = fmtLen(Number(range.value)); range.style.setProperty('--fill', `${((range.value - 5) / 175) * 100}%`); };
+  range.addEventListener('input', fill);
+  fill();
+  const custom = h('div', { class: 'sp-custom' }, h('div', { class: 'sp-custom-top' }, h('span', { class: 'meta' }, 'Custom'), val), range,
+    h('button', { class: 'btn primary small', onclick: () => set(Number(range.value)) }, 'Start'));
+  const pop = h('div', { class: 'menu sleep-pop', role: 'dialog', 'aria-label': 'Sleep timer' },
+    h('div', { class: 'sp-head' }, h('span', { class: 'sp-ico', html: icon('moon') }), h('b', {}, 'Sleep timer')), status, chips, custom);
+  function paint() {
+    const at = state.playback?.sleep_at;
+    if (at == null) { status.replaceChildren(h('p', { class: 'meta' }, 'Stop the music after a while.')); return; }
+    if (at === 0) {
+      status.replaceChildren(h('div', { class: 'sp-count' }, h('span', { class: 'sp-time small' }, 'End of this song')),
+        h('div', { class: 'actions' }, h('button', { class: 'btn small', onclick: () => set(null) }, 'Turn off')));
+      return;
+    }
+    const left = Math.max(0, at - Date.now());
+    const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+    status.replaceChildren(h('div', { class: 'sp-count' }, h('span', { class: 'sp-time' }, `${mm}:${String(ss).padStart(2, '0')}`), h('span', { class: 'meta' }, 'until the music stops')),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn small', onclick: () => set(Math.ceil(left / 60000) + 15) }, '+15 min'),
+        h('button', { class: 'btn small', onclick: () => set(null) }, 'Turn off')));
+  }
+  paint();
+  const tick = setInterval(() => { if (!pop.isConnected) { clearInterval(tick); return; } paint(); }, 1000);
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(r.right - pop.offsetWidth, window.innerWidth - pop.offsetWidth - 8))}px`;
+  pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 10)}px`;
+  pop.onClose = () => clearInterval(tick);
+  openMenuEl = pop;
+}
 function paintSleep() {
   const btn = $('#btn-sleep');
   const at = state.playback?.sleep_at;

@@ -147,7 +147,7 @@ function renderSettings() {
   body.replaceChildren(
     group('Account', null, ...accountSettingsRows()),
     group('Appearance', null,
-      settingRow('Background', 'Choose the playing cover or a simple pixel-art animation.', backgroundControl()),
+      settingRow('Background', 'The playing song’s cover, or an animated background: stars, snow, rain on glass, hyperspace (moves with the music) or a lava lamp.', backgroundControl()),
       settingRow('Background strength', null, strengthControl()),
       settingRow('Glass transparency', 'Choose how much of the background shows through the panels.', glassTransparencyControl()),
       settingToggle('Colors from the cover', 'Tint the app from the playing song’s cover. Off: keep the black-and-white palette.', 'cover_colors'),
@@ -220,7 +220,7 @@ async function checkHealth(target) {
 function backgroundControl() {
   const s = state.settings;
   const sel = h('select', {},
-    ...[['art', 'Playing song’s cover'], ['stars', 'Pixel starfield'], ['snow', 'Pixel snowfall']]
+    ...[['art', 'Playing song’s cover'], ['stars', 'Starfield'], ['snow', 'Snowfall'], ['rain', 'Rain on glass'], ['hyperspace', 'Hyperspace'], ['lava', 'Lava lamp']]
       .map(([v, l]) => h('option', { value: v, selected: (s.background || 'art') === v }, l)));
   sel.addEventListener('change', async () => {
     await updateSettings({ background: sel.value });
@@ -529,14 +529,14 @@ function eqGraph(gains, onChange, isOn) {
   function start() {
     if (live) return;
     live = true;
-    call('analyzer_enable', { on: true }).catch(() => {});
+    claimAnalyzer('eq', true);
     raf = requestAnimationFrame(tick);
   }
   function stop() {
     if (!live) return;
     live = false;
     cancelAnimationFrame(raf);
-    call('analyzer_enable', { on: false }).catch(() => {});
+    claimAnalyzer('eq', false);
   }
   new ResizeObserver(() => { resize(); if (el.isConnected) start(); }).observe(canvas);
   return { el, refresh: draw };

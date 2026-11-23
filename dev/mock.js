@@ -142,7 +142,7 @@
         { id: 1, user_id: 'me', kind: 'follow_request', actor: 'u6', data: {}, read: false, created_at: iso(3600000) },
         { id: 2, user_id: 'me', kind: 'song_shared', actor: 'u1', data: { title: tracks[4].title }, read: false, created_at: iso(1800000) },
         { id: 3, user_id: 'me', kind: 'follow_accepted', actor: 'u4', data: {}, read: true, created_at: iso(86400000 * 2) },
-        { id: 4, user_id: 'me', kind: 'jam_started', actor: 'u2', data: { code: 'LEO123', title: 'Friday wind-down' }, read: true, created_at: iso(86400000 * 3) },
+        { id: 4, user_id: 'me', kind: 'jam_started', actor: 'u2', data: { code: 'leofriday2026', title: 'Friday wind-down' }, read: true, created_at: iso(86400000 * 3) },
       ],
       profile_stats: ['me', 'u1', 'u2', 'u3', 'u4'].map((u, i) => ({
         user_id: u, top_artists: [{ name: 'Daft Punk' }, { name: 'Justice' }, { name: 'Tame Impala' }].slice(i % 2),
@@ -154,11 +154,13 @@
         { id: 'c2', owner: 'u1', local_id: 'x2', kind: 'playlist', title: 'French touch essentials', description: '', folder: null, pinned: false, visibility: 'public', collaborative: false, version: 3, deleted_at: null, cover_md5: null, cover: null, tracks: tracks.slice(1, 5).map(slim), created_at: iso(86400000 * 40), updated_at: iso(86400000) },
       ],
       playlist_members: [{ playlist_id: 'c1', user_id: 'me', role: 'editor' }, { playlist_id: 'c1', user_id: 'u3', role: 'editor' }],
-      jams: [{ code: 'LEO123', host: 'u2', owner: 'u2', title: 'Friday wind-down', persistent: false, active: true, friends_can_join: true, approve_adds: false, state: { track: slim(tracks[0]), position: 64, playing: true }, state_at: iso(30000), created_at: iso(1800000), updated_at: iso(30000) }],
-      jam_members: [{ code: 'LEO123', user_id: 'u2' }, { code: 'LEO123', user_id: 'u1' }, { code: 'LEO123', user_id: 'u4' }],
+      jams: [{ code: 'leofriday2026', host: 'u2', owner: 'u2', title: 'Friday wind-down', persistent: false, active: true, friends_can_join: true, approve_adds: false, state: { track: slim(tracks[0]), position: 64, playing: true }, state_at: iso(30000), created_at: iso(1800000), updated_at: iso(30000) }],
+      jam_members: [{ code: 'leofriday2026', user_id: 'u2' }, { code: 'leofriday2026', user_id: 'u1' }, { code: 'leofriday2026', user_id: 'u4' }],
       jam_events: [
-        { id: 1, code: 'LEO123', user_id: 'u1', kind: 'chat', data: { text: 'this transition 😮‍💨' }, created_at: iso(240000) },
-        { id: 2, code: 'LEO123', user_id: 'u4', kind: 'suggest', data: { track: slim(tracks[2]) }, created_at: iso(120000) },
+        { id: 1, code: 'leofriday2026', user_id: 'u2', kind: 'chat', payload: { text: 'welcome in! Friday mode 🌙' }, created_at: iso(600000) },
+        { id: 2, code: 'leofriday2026', user_id: 'u1', kind: 'chat', payload: { text: 'this transition 😮‍💨' }, created_at: iso(240000) },
+        { id: 3, code: 'leofriday2026', user_id: 'u4', kind: 'suggest', status: 'pending', payload: { track: slim(tracks[2]) }, created_at: iso(120000) },
+        { id: 4, code: 'leofriday2026', user_id: 'u1', kind: 'vote_skip', payload: { key: tracks[0].key }, created_at: iso(60000) },
       ],
       wrapped: [],
     };
@@ -230,8 +232,17 @@
       friend_leaderboard: () => T.profiles.filter((p) => p.id !== UID('u6')).map((p, i) => ({ user_id: p.id, name: p.name, avatar: p.avatar, minutes: 900 - i * 120 })),
       playlist_invite: () => 'PREVIEWCODE',
       rotate_playlist_invite: () => 'NEWCODE',
-      open_jam: () => ({ code: 'YOU999' }),
-      join_jam: () => T.jams[0],
+      open_jam: ({ new_code, make_persistent }) => {
+        const code = new_code || 'yourroom2026';
+        T.jams.push({ code, host: UID('me'), owner: UID('me'), title: '', persistent: !!make_persistent, active: true, friends_can_join: true, approve_adds: true, state: null, state_at: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+        T.jam_members.push({ code, user_id: UID('me') }, { code, user_id: UID('u1') }, { code, user_id: UID('u4') });
+        T.jam_events.push({ id: Date.now(), code, user_id: UID('u1'), kind: 'chat', payload: { text: 'ooh, what are we listening to?' }, created_at: new Date().toISOString() });
+        return code;
+      },
+      join_jam: ({ jam_code }) => {
+        if (!T.jam_members.some((m) => m.code === jam_code && m.user_id === UID('me'))) T.jam_members.push({ code: jam_code, user_id: UID('me') });
+        return null;
+      },
       join_playlist: () => T.playlists[0],
       playlist_op: () => ({ version: 8 }),
     };
@@ -245,7 +256,8 @@
       if (!m) return json({ message: 'not found' }, 404);
       const [, isRpc, name] = m;
       const body = init.body ? JSON.parse(init.body) : undefined;
-      if (isRpc) return json(RPC[name] ? RPC[name](body || {}) : null);
+      // A function that returns nothing answers with an empty body, like PostgREST.
+      if (isRpc) { const out = RPC[name] ? RPC[name](body || {}) : undefined; return json(out == null ? undefined : out); }
       const table = T[name] || (T[name] = []);
       if (method === 'GET') return json(query(name, u.search));
       if (method === 'POST') {
@@ -261,10 +273,27 @@
     // Realtime: accept joins and heartbeats, never push anything.
     class FakeSocket {
       constructor() { this.readyState = 0; setTimeout(() => { this.readyState = 1; this.onopen?.({}); }, 50); }
+      push(topic, event, payload, ref = null, delay = 20) {
+        setTimeout(() => this.onmessage?.({ data: JSON.stringify({ topic, event, payload, ref }) }), delay);
+      }
       send(raw) {
         let msg; try { msg = JSON.parse(raw); } catch { return; }
-        const reply = { topic: msg.topic, event: 'phx_reply', payload: { status: 'ok', response: {} }, ref: msg.ref };
-        setTimeout(() => this.onmessage?.({ data: JSON.stringify(reply) }), 20);
+        this.push(msg.topic, 'phx_reply', { status: 'ok', response: {} }, msg.ref);
+        if (msg.event === 'phx_join') {
+          if (msg.payload?.config?.postgres_changes?.length) this.push(msg.topic, 'system', { status: 'ok', extension: 'postgres_changes' }, null, 60);
+          const jamCode = (msg.topic.match(/^realtime:jam:(.+)$/) || [])[1];
+          if (jamCode) {
+            const state = {};
+            for (const m of T.jam_members.filter((x) => x.code === jamCode && x.user_id !== UID('me'))) {
+              const pr = byId(m.user_id);
+              if (pr) state[m.user_id] = { metas: [{ name: pr.name, avatar: pr.avatar }] };
+            }
+            this.push(msg.topic, 'presence_state', state, null, 80);
+          }
+        }
+        if (msg.event === 'presence' && msg.payload?.event === 'track') {
+          this.push(msg.topic, 'presence_diff', { joins: { [UID('me')]: { metas: [msg.payload.payload] } }, leaves: {} }, null, 40);
+        }
       }
       close() { this.readyState = 3; this.onclose?.({ code: 1000 }); }
       addEventListener(type, fn) { this[`on${type}`] = fn; }

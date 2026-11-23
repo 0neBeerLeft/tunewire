@@ -108,6 +108,16 @@ function hydrateIcons(root = document) {
   }
 }
 
+// The audio analyzer (live spectrum) is on while anything needs it: the EQ
+// graph, the Hyperspace background.
+const analyzerClaims = new Set();
+function claimAnalyzer(who, on) {
+  const before = analyzerClaims.size > 0;
+  if (on) analyzerClaims.add(who); else analyzerClaims.delete(who);
+  const now = analyzerClaims.size > 0;
+  if (now !== before && window.__TAURI__) call('analyzer_enable', { on: now }).catch(() => {});
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -566,7 +576,7 @@ function showView(name, { push = true, reopen = null } = {}) {
   if (name === 'charts') renderCharts();
   if (name === 'discover') renderDiscover();
   if (name === 'friends') renderFriends();
-  if (name === 'together') renderTogether();
+  if (name === 'together') renderTogetherLanding();
   if (name === 'releases') renderReleases();
   if (name === 'home') renderHome();
   if (name === 'stats') renderStats();

@@ -28,6 +28,12 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Settings: each section is a card, with a bar to jump between them
 - Dialogs are solid and easy to read; the first-start question gives you time to read it
 
+**Backgrounds and Listen together**
+- New animated backgrounds, all black and white: Rain on glass, Hyperspace (speeds up with the music) and Lava lamp
+- Listen together: a new page to start or join a session and see friends who are live; while you're in a session it sits in the side panel next to the song; a Together button in the player bar shows who's listening
+- A new sleep timer with a live countdown, presets and any length you like
+- Page titles sit flat on the page; quieter song-list headers; pill-style source and range switches
+
 **And more**
 - Stars and Snow backgrounds redrawn: depth, twinkling and shooting stars, soft drifting snow; visible under the whole app, and lighter on the GPU
 - The player bar is a floating glass dock

@@ -95,7 +95,8 @@
         </section>
         <section class="view social-view" id="view-together">
           <div class="page-head"><div><h1>Listen together</h1><span class="meta">Play in sync with friends: one host, everyone hears the same song</span></div></div>
-          <div class="side-panel social-page" id="together-panel"></div>
+          <div id="together-landing"></div>
+          <div class="side-panel social-page" id="together-panel" hidden></div>
         </section>
         <section class="view" id="view-search">
           <div id="search-home"></div>
@@ -228,6 +229,12 @@
       <div class="np-panel" id="np-panel" role="tabpanel" hidden></div>
       <div class="queue-list" id="queue-list" role="tabpanel"></div>
       <div class="lyrics" id="lyrics-panel" role="tabpanel" hidden></div>
+      <section class="jam-dock" id="jam-dock" hidden aria-label="Listen together session">
+        <div class="jam-dock-head">
+          <span class="live-dot" aria-hidden="true"></span><b>Listening together</b><span class="meta" id="jam-dock-count"></span>
+          <button class="icon-btn small ml-auto" id="jam-dock-page" title="Open the session page"><i data-icon="expand"></i></button>
+        </div>
+      </section>
     </aside>
 
     <footer class="player-bar" id="player-bar">
@@ -265,7 +272,7 @@
         <button class="icon-btn" id="btn-np" title="Now playing view"><i data-icon="npView"></i></button>
         <button class="icon-btn" id="btn-lyrics" title="Lyrics"><i data-icon="mic"></i></button>
         <button class="icon-btn" id="toggle-queue" title="Queue (Q)"><i data-icon="queue"></i></button>
-        <button class="icon-btn" id="btn-jam" title="Listen together" hidden><i data-icon="friends"></i></button>
+        <button class="jam-pill" id="btn-jam" title="Listen together" hidden><i data-icon="headphones"></i><span class="jp-label">Together</span><span class="jp-count" hidden></span></button>
         <button class="icon-btn" id="btn-device" title="Output device"><i data-icon="speaker"></i></button>
         <button class="icon-btn" id="btn-sleep" title="Sleep timer"><i data-icon="moon"></i></button>
         <button class="icon-btn" id="btn-mute" title="Mute (M)"><i data-icon="volume"></i></button>

@@ -215,7 +215,7 @@ impl Settings {
         self.search_history.truncate(30);
         self.background_strength = self.background_strength.min(100);
         self.glass_transparency = self.glass_transparency.min(80);
-        if !matches!(self.background.as_str(), "art" | "stars" | "snow") {
+        if !matches!(self.background.as_str(), "art" | "stars" | "snow" | "rain" | "hyperspace" | "lava") {
             self.background = "art".into();
         }
         if !matches!(self.spotify_backend.as_str(), "auto" | "spotdl" | "embed" | "off") {

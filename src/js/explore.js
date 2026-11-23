@@ -583,9 +583,10 @@ async function updateAmbient() {
   const mode = s.background || 'art';
   const seq = ++ambient.seq;
   document.documentElement.style.setProperty('--amb-strength', ((s.background_strength ?? 45) / 100).toFixed(2));
-  $('#ambient').className = mode;
+  $('#ambient').className = `${mode}${ANIMATED_BACKGROUNDS.includes(mode) ? ' anim' : ''}`;
   particles.set(mode);
-  if (mode === 'stars' || mode === 'snow') return setAmbientLayer(null);
+  // Animated backgrounds draw their own; Rain on glass shows the cover behind the glass.
+  if (ANIMATED_BACKGROUNDS.includes(mode) && mode !== 'rain') return setAmbientLayer(null);
   const p = state.playback;
   const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
   if (!thumb) return setAmbientLayer(null);
@@ -594,16 +595,23 @@ async function updateAmbient() {
   setAmbientLayer(wash ? `url("${wash}")` : null);
 }
 
-// Animated backgrounds (Stars, Snow) ------------------------------------------------
+// Animated backgrounds (Stars, Snow, Rain on glass, Hyperspace, Lava lamp) --------
 //
-// One canvas behind the app, drawn about 30 times a second from pre-rendered
-// sprites (drawImage only: no per-frame gradients or blur), with a particle
-// count that scales with the window and is capped. Stops when the window is
-// hidden or minimized; one still frame with "reduce motion".
+// One canvas behind the app, drawn about 30 times a second (Lava lamp: 24,
+// at a quarter of the resolution), mostly from pre-rendered sprites, with
+// particle counts that scale with the window and are capped. Everything is
+// black and white (the theme's text color on its background). Stops while
+// the window is hidden or minimized; one still frame with "reduce motion".
+// Hyperspace speeds up with the music, using the audio analyzer.
+
+const ANIMATED_BACKGROUNDS = ['stars', 'snow', 'rain', 'hyperspace', 'lava'];
 
 const particles = (() => {
-  let canvas = null, ctx = null, mode = null, raf = 0, last = 0, W = 0, H = 0, items = [], sprites = null, shooting = null, nextShoot = 0, wind = 0, windTarget = 0;
-  const FRAME_MS = 33;
+  let canvas = null, ctx = null, mode = null, raf = 0, last = 0, W = 0, H = 0, items = [], sprites = null;
+  let shooting = null, nextShoot = 0, wind = 0, windTarget = 0, energy = 0, energyAt = 0, energyPending = false;
+  let streaks = [], slides = [], nextSlide = 0;
+  const FRAME_MS = { lava: 42 };
+  const SCALE = { lava: 0.25 };
   const still = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Soft round sprite of `r` px radius (glow fades to transparent).
@@ -621,21 +629,45 @@ const particles = (() => {
     return c;
   }
 
+  // A water drop on glass: dark rim below, a bright highlight above-left.
+  function dropSprite(r) {
+    const s = Math.ceil(r * 2 + 4);
+    const c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    const cx = s / 2, cy = s / 2;
+    const body = g.createRadialGradient(cx, cy + r * 0.25, r * 0.2, cx, cy, r);
+    body.addColorStop(0, 'rgba(255,255,255,.10)');
+    body.addColorStop(0.75, 'rgba(255,255,255,.04)');
+    body.addColorStop(0.92, 'rgba(0,0,0,.45)');
+    body.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = body;
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    g.beginPath(); g.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.28, r * 0.18, -0.6, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.22)';
+    g.lineWidth = Math.max(0.6, r * 0.12);
+    g.beginPath(); g.arc(cx, cy, r * 0.82, 0.3 * Math.PI, 0.85 * Math.PI); g.stroke();
+    return c;
+  }
+
   function makeSprites() {
     return {
       dot: [sprite(1.4, 0.55), sprite(2, 0.45), sprite(2.8, 0.4)],
       glow: sprite(9, 0.08),
       flake: [sprite(1.6, 0.5), sprite(2.6, 0.45), sprite(4, 0.35), sprite(6.5, 0.25)],
+      drops: [2, 3, 4.5, 6.5, 9].map(dropSprite),
+      blob: sprite(64, 0.45),
     };
   }
 
   function populate() {
-    const area = W * H;
-    items = [];
+    const area = W * H / ((SCALE[mode] || 1) ** 2);
+    items = []; streaks = []; slides = [];
     if (mode === 'stars') {
       const n = Math.min(260, Math.round(area / 6500));
       for (let i = 0; i < n; i++) {
-        const depth = Math.random() < 0.6 ? 0 : Math.random() < 0.75 ? 1 : 2; // far, mid, near
+        const depth = Math.random() < 0.6 ? 0 : Math.random() < 0.75 ? 1 : 2;
         items.push({ x: Math.random() * W, y: Math.random() * H, depth, phase: Math.random() * Math.PI * 2, speed: 0.6 + Math.random() * 1.8, base: 0.35 + Math.random() * 0.55, glow: depth === 2 && Math.random() < 0.35 });
       }
     } else if (mode === 'snow') {
@@ -644,25 +676,58 @@ const particles = (() => {
         const depth = Math.random() < 0.5 ? 0 : Math.random() < 0.7 ? 1 : Math.random() < 0.85 ? 2 : 3;
         items.push({ x: Math.random() * W, y: Math.random() * H, depth, phase: Math.random() * Math.PI * 2, sway: 0.4 + Math.random() * 1.2, fall: [14, 26, 44, 70][depth] * (0.75 + Math.random() * 0.5), alpha: [0.45, 0.6, 0.8, 0.55][depth] * (0.7 + Math.random() * 0.3) });
       }
+    } else if (mode === 'rain') {
+      // Drops beaded on the glass (still), and rain falling outside it.
+      const n = Math.min(320, Math.round(area / 4200));
+      for (let i = 0; i < n; i++) {
+        const k = Math.random() < 0.55 ? 0 : Math.random() < 0.6 ? 1 : Math.random() < 0.75 ? 2 : 3;
+        items.push({ x: Math.random() * W, y: Math.random() * H, k, a: 0.55 + Math.random() * 0.45 });
+      }
+      const m = Math.min(90, Math.round(area / 22000));
+      for (let i = 0; i < m; i++) streaks.push({ x: Math.random() * W, y: Math.random() * H, len: 14 + Math.random() * 26, v: 600 + Math.random() * 500, a: 0.05 + Math.random() * 0.08 });
+    } else if (mode === 'hyperspace') {
+      const n = Math.min(320, Math.round(area / 4500));
+      for (let i = 0; i < n; i++) items.push(newStar(true));
+    } else if (mode === 'lava') {
+      const n = 8;
+      for (let i = 0; i < n; i++) {
+        items.push({ x: (0.15 + 0.7 * Math.random()) * W, phase: Math.random() * Math.PI * 2, speed: 0.025 + Math.random() * 0.04, r: (0.07 + Math.random() * 0.09) * Math.max(W, H), sway: 0.04 + Math.random() * 0.06, swayPhase: Math.random() * 6 });
+      }
     }
+  }
+
+  function newStar(anywhere) {
+    // x/y in -1..1 around the centre, z depth 0..1 (1 = far).
+    const a = Math.random() * Math.PI * 2, d = 0.05 + Math.random() * 0.95;
+    return { x: Math.cos(a) * d, y: Math.sin(a) * d, z: anywhere ? Math.random() : 1, pz: null };
   }
 
   function resize() {
     if (!canvas) return;
-    // CSS pixels (not device pixels): the particles are soft anyway, and it
-    // keeps the canvas small on high-DPI screens.
-    W = window.innerWidth; H = window.innerHeight;
+    const s = SCALE[mode] || 1;
+    W = Math.max(1, Math.round(window.innerWidth * s)); H = Math.max(1, Math.round(window.innerHeight * s));
     canvas.width = W; canvas.height = H;
     populate();
     draw(performance.now(), 0);
   }
 
+  // Music energy (0..1) for Hyperspace, from the analyzer, about 8 times a second.
+  function sampleEnergy(t) {
+    if (energyPending || t - energyAt < 120) return;
+    energyAt = t; energyPending = true;
+    call('audio_spectrum', { bands: 24 }).then((s) => {
+      const lows = (s || []).slice(0, 12);
+      const e = lows.length ? lows.reduce((a, db) => a + Math.max(0, (db + 70) / 70), 0) / lows.length : 0;
+      energy += (e - energy) * 0.5;
+    }).catch(() => {}).finally(() => { energyPending = false; });
+  }
+
   function draw(t, dt) {
     if (!ctx) return;
-    ctx.clearRect(0, 0, W, H);
     const s = dt / 1000;
+    ctx.clearRect(0, 0, W, H);
     if (mode === 'stars') {
-      const drift = [3, 7, 14]; // px per second, by depth: parallax
+      const drift = [3, 7, 14];
       for (const p of items) {
         p.x -= drift[p.depth] * s;
         p.y += drift[p.depth] * 0.35 * s;
@@ -672,40 +737,22 @@ const particles = (() => {
         ctx.globalAlpha = tw;
         const img = sprites.dot[p.depth];
         ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
-        if (p.glow) {
-          ctx.globalAlpha = tw * 0.35;
-          ctx.drawImage(sprites.glow, p.x - sprites.glow.width / 2, p.y - sprites.glow.height / 2);
-        }
+        if (p.glow) { ctx.globalAlpha = tw * 0.35; ctx.drawImage(sprites.glow, p.x - sprites.glow.width / 2, p.y - sprites.glow.height / 2); }
       }
-      // An occasional shooting star.
       if (!shooting && t > nextShoot && dt) {
         const fromLeft = Math.random() < 0.5;
         shooting = { x: fromLeft ? Math.random() * W * 0.5 : W * 0.5 + Math.random() * W * 0.5, y: Math.random() * H * 0.4, vx: (fromLeft ? 1 : -1) * (520 + Math.random() * 260), vy: 220 + Math.random() * 140, life: 0 };
       }
       if (shooting) {
-        shooting.life += s;
-        shooting.x += shooting.vx * s;
-        shooting.y += shooting.vy * s;
-        const a = Math.max(0, 1 - shooting.life / 0.9);
-        const len = 0.12;
+        shooting.life += s; shooting.x += shooting.vx * s; shooting.y += shooting.vy * s;
+        const a = Math.max(0, 1 - shooting.life / 0.9), len = 0.12;
         const grad = ctx.createLinearGradient(shooting.x, shooting.y, shooting.x - shooting.vx * len, shooting.y - shooting.vy * len);
-        grad.addColorStop(0, `rgba(255,255,255,${0.9 * a})`);
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(shooting.x, shooting.y);
-        ctx.lineTo(shooting.x - shooting.vx * len, shooting.y - shooting.vy * len);
-        ctx.stroke();
-        if (a <= 0 || shooting.x < -200 || shooting.x > W + 200 || shooting.y > H + 200) {
-          shooting = null;
-          nextShoot = t + 5000 + Math.random() * 9000;
-        }
+        grad.addColorStop(0, `rgba(255,255,255,${0.9 * a})`); grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.globalAlpha = 1; ctx.strokeStyle = grad; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(shooting.x, shooting.y); ctx.lineTo(shooting.x - shooting.vx * len, shooting.y - shooting.vy * len); ctx.stroke();
+        if (a <= 0 || shooting.x < -200 || shooting.x > W + 200 || shooting.y > H + 200) { shooting = null; nextShoot = t + 5000 + Math.random() * 9000; }
       }
     } else if (mode === 'snow') {
-      // Gentle gusts: the wind wanders towards a new target now and then.
       if (Math.random() < s * 0.15) windTarget = (Math.random() - 0.5) * 40;
       wind += (windTarget - wind) * Math.min(1, s * 0.5);
       for (const p of items) {
@@ -719,6 +766,84 @@ const particles = (() => {
         const img = sprites.flake[p.depth];
         ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
       }
+    } else if (mode === 'rain') {
+      // Rain outside the window: faint slanted streaks.
+      ctx.lineCap = 'round';
+      for (const r of streaks) {
+        r.y += r.v * s; r.x += r.v * 0.12 * s;
+        if (r.y > H + 30) { r.y = -30; r.x = Math.random() * W; }
+        ctx.globalAlpha = r.a; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x - r.len * 0.12, r.y - r.len); ctx.stroke();
+      }
+      // Drops resting on the glass.
+      for (const d of items) {
+        const img = sprites.drops[d.k];
+        ctx.globalAlpha = d.a;
+        ctx.drawImage(img, d.x - img.width / 2, d.y - img.height / 2);
+      }
+      // Now and then a big drop runs down, stopping and starting, leaving a
+      // trail of small beads.
+      if (dt && t > nextSlide && slides.length < 6) {
+        slides.push({ x: Math.random() * W, y: -10, v: 0, k: 3 + (Math.random() < 0.4 ? 1 : 0), stick: 0, trail: 0 });
+        nextSlide = t + 900 + Math.random() * 2600;
+      }
+      for (let i = slides.length - 1; i >= 0; i--) {
+        const d = slides[i];
+        if (d.stick > 0) d.stick -= s;
+        else {
+          d.v = Math.min(260, d.v + 420 * s);
+          d.y += d.v * s;
+          d.x += Math.sin(t / 300 + i) * 6 * s;
+          if (Math.random() < s * 0.8) { d.stick = 0.2 + Math.random() * 0.8; d.v = 0; }
+          d.trail += d.v * s;
+          if (d.trail > 16) { d.trail = 0; items.push({ x: d.x + (Math.random() - 0.5) * 2, y: d.y - 8, k: Math.random() < 0.7 ? 0 : 1, a: 0.5 + Math.random() * 0.3 }); }
+        }
+        // It wipes up resting drops in its path.
+        for (let j = items.length - 1; j >= 0; j--) { const o = items[j]; if (Math.abs(o.x - d.x) < 6 && Math.abs(o.y - d.y) < 6 && o.k < 2) items.splice(j, 1); }
+        const img = sprites.drops[d.k];
+        ctx.globalAlpha = 0.95;
+        ctx.drawImage(img, d.x - img.width / 2, d.y - img.height / 2);
+        if (d.y > H + 20) slides.splice(i, 1);
+      }
+      if (items.length > 520) items.splice(0, items.length - 520);
+    } else if (mode === 'hyperspace') {
+      if (dt) sampleEnergy(t);
+      const playing = state.playback?.status === 'playing';
+      const target = playing ? 0.12 + energy * 1.1 : 0.05;
+      const cx = W / 2, cy = H / 2, f = Math.min(W, H) * 0.55;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < items.length; i++) {
+        const p = items[i];
+        const pz = p.z;
+        p.z -= target * s * (0.6 + (1 - p.z) * 0.8);
+        if (p.z <= 0.02) { items[i] = newStar(false); continue; }
+        const sx = cx + (p.x / p.z) * f, sy = cy + (p.y / p.z) * f;
+        const px = cx + (p.x / pz) * f, py = cy + (p.y / pz) * f;
+        if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) { items[i] = newStar(false); continue; }
+        const near = 1 - p.z;
+        ctx.globalAlpha = Math.min(1, 0.15 + near * 0.9);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 0.6 + near * 1.8;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+      }
+    } else if (mode === 'lava') {
+      // Blobs rise and fall slowly; drawn soft and additive on a small canvas,
+      // the canvas's CSS contrast filter turns their overlap into one gooey
+      // shape (see .amb-particles.lava).
+      const tt = t / 1000;
+      // Opaque black under the blobs: the contrast filter needs it, and the
+      // screen blend makes black disappear.
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter';
+      for (const b of items) {
+        const y = H * (0.5 + 0.42 * Math.sin(tt * b.speed * 2 * Math.PI + b.phase));
+        const x = b.x + Math.sin(tt * b.sway + b.swayPhase) * W * 0.06;
+        const r = b.r * (0.9 + 0.1 * Math.sin(tt * 0.7 + b.phase));
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(sprites.blob, x - r, y - r, r * 2, r * 2);
+      }
+      ctx.globalCompositeOperation = 'source-over';
     }
     ctx.globalAlpha = 1;
   }
@@ -727,31 +852,28 @@ const particles = (() => {
     raf = requestAnimationFrame(loop);
     if (document.hidden) { last = t; return; }
     const dt = t - last;
-    if (dt < FRAME_MS) return;
+    if (dt < (FRAME_MS[mode] || 33)) return;
     last = t;
     draw(t, Math.min(dt, 100));
   }
 
   function set(next) {
-    const want = next === 'stars' || next === 'snow' ? next : null;
+    const want = ANIMATED_BACKGROUNDS.includes(next) ? next : null;
     if (want === mode) return;
     mode = want;
     cancelAnimationFrame(raf);
-    if (!mode) {
-      canvas?.remove();
-      canvas = ctx = null;
-      items = [];
-      return;
-    }
+    claimAnalyzer('hyperspace', mode === 'hyperspace');
+    if (!mode) { canvas?.remove(); canvas = ctx = null; items = []; return; }
     if (!canvas) {
       canvas = document.createElement('canvas');
-      canvas.className = 'amb-particles';
       ctx = canvas.getContext('2d');
       $('#ambient').append(canvas);
       sprites ||= makeSprites();
     }
+    canvas.className = `amb-particles ${mode}`;
     shooting = null;
     nextShoot = performance.now() + 3000;
+    nextSlide = 0;
     resize();
     if (!still()) { last = performance.now(); raf = requestAnimationFrame(loop); }
   }

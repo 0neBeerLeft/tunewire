@@ -428,7 +428,7 @@ function jamCode() {
 }
 
 async function startJam() {
-  if (jam.code) { setPanelOpen(true); showPanel('together'); return; }
+  if (jam.code) { openJamDock(); return; }
   if (!(await requireAccount({ why: 'Listen together' }))) return;
   const room = h('input', { type: 'checkbox', checked: false });
   const friends = h('input', { type: 'checkbox', checked: false });
@@ -456,7 +456,7 @@ async function startJam() {
 }
 
 async function confirmJoinJam(code) {
-  if (jam.code === code) { setPanelOpen(true); showPanel('together'); return; }
+  if (jam.code === code) { openJamDock(); return; }
   const ok = await confirmModal({
     title: 'Join a listening session?',
     message: 'Your player will follow what the host plays (your current song stops). Others in the session see your Discord name. You can leave at any time.',
@@ -490,7 +490,7 @@ async function openJam(code) {
     jam.people = presenceList(p);
     for (const x of jam.people) jam.names.set(x.key, { name: x.name, avatar: x.avatar });
     if (jam.host && jam.people.length > before) publishJamState(true);
-    renderTogether();
+    paintJamButton(); // people count on the button and dock; re-renders the session
   });
   jam.channel.on('b:react', (m) => {
     // Only known reactions, at most a few a second per person.
@@ -511,7 +511,7 @@ async function openJam(code) {
   await refreshJam();
   jam.timers.push(setInterval(() => { if (jam.host) publishJamState(false); else checkJamQuality(); }, 4000));
   setPanelOpen(true);
-  showPanel('together');
+  showPanel('now');
   paintJamButton();
 }
 
@@ -787,7 +787,6 @@ async function leaveJam({ end = false, silent = false, server = true } = {}) {
   renderTogether();
   paintJamButton();
   if (!silent) toast(end ? 'Session ended' : 'You left the session', 'info', 1800);
-  if (state.panel === 'together') showPanel('queue');
 }
 
 function hostLeaveMenu(anchor) {
@@ -800,8 +799,102 @@ function hostLeaveMenu(anchor) {
 
 function paintJamButton() {
   const b = $('#btn-jam');
-  if (b) { b.classList.toggle('on', !!jam.code); b.hidden = !cloudOn(); b.setAttribute('aria-pressed', String(!!jam.code)); }
+  if (b) {
+    const n = jam.code ? Math.max(1, jam.people.length) : 0;
+    b.classList.toggle('on', !!jam.code);
+    b.hidden = !cloudOn();
+    b.setAttribute('aria-pressed', String(!!jam.code));
+    b.querySelector('.jp-label').textContent = jam.code ? (jam.host ? 'Hosting' : 'Together') : 'Together';
+    const c = b.querySelector('.jp-count');
+    c.hidden = !jam.code;
+    c.textContent = String(n);
+    b.title = jam.code ? `Listening together · ${n} ${n === 1 ? 'person' : 'people'}` : 'Listen together';
+  }
+  dockJam();
 }
+
+// The session lives in the right panel, under the song, while you're in one;
+// the page then shows a summary. Out of a session the page is a landing.
+function dockJam() {
+  const panel = $('#together-panel'), dock = $('#jam-dock');
+  if (!panel || !dock) return;
+  if (jam.code) {
+    if (panel.parentElement !== dock) dock.append(panel);
+    panel.hidden = false;
+    dock.hidden = false;
+    $('#app').classList.add('jam-docked');
+    $('#jam-dock-count').textContent = `· ${Math.max(1, jam.people.length)}`;
+    renderTogether();
+  } else {
+    const home = $('#view-together');
+    if (panel.parentElement !== home) home.append(panel);
+    panel.hidden = true;
+    dock.hidden = true;
+    $('#app').classList.remove('jam-docked');
+  }
+  if (state.view === 'together') renderTogetherLanding();
+}
+
+function openJamDock() {
+  setPanelOpen(true);
+  if (!['now', 'queue', 'lyrics'].includes(state.panel)) showPanel('now');
+  $('#jam-dock')?.scrollIntoView({ block: 'nearest' });
+}
+
+/** The Listen together page: a landing, or your session's summary. */
+async function renderTogetherLanding() {
+  const box = $('#together-landing');
+  if (!box) return;
+  if (!cloudOn()) { box.replaceChildren(h('div', { class: 'empty' }, h('p', {}, 'Not available in this build.'))); return; }
+  if (jam.code) {
+    const n = Math.max(1, jam.people.length);
+    box.replaceChildren(h('div', { class: 'jt-live' },
+      h('div', { class: 'jt-live-top' }, h('span', { class: 'live-dot' }), h('b', {}, jam.host ? 'You’re hosting a session' : 'You’re in a session'), h('span', { class: 'meta' }, `${n} ${n === 1 ? 'person' : 'people'}`)),
+      h('div', { class: 'jt-faces' }, ...jam.people.slice(0, 8).map((p) => avatarEl(p.avatar, p.name, 'avatar'))),
+      h('p', { class: 'muted' }, 'The session is open in the side panel, next to the song: chat, suggestions and votes are there.'),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn primary', html: `${icon('expand')}Show the session`, onclick: openJamDock }),
+        h('button', { class: 'btn', html: `${icon('link')}Copy invite link`, onclick: () => { copyText(JAM_LINK(jam.code)); toast('Invite link copied', 'ok', 1500); } }),
+        h('button', { class: 'btn danger-ghost', onclick: (e) => (jam.host ? hostLeaveMenu(e.currentTarget) : leaveJam()) }, jam.host ? 'End or hand over' : 'Leave'))));
+    return;
+  }
+  const code = h('input', { class: 'input', placeholder: 'Paste an invite link or code', spellcheck: 'false' });
+  const join = () => {
+    const v = code.value.trim();
+    const m = v.match(/[a-z0-9]{8,24}$/i);
+    if (!m) { toast('That doesn’t look like a session link', 'error'); return; }
+    confirmJoinJam(m[0].toLowerCase());
+  };
+  code.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
+  const live = h('div', { class: 'jt-friends' });
+  box.replaceChildren(
+    h('div', { class: 'jt-hero' },
+      h('div', { class: 'jt-hero-art', html: icon('headphones') }),
+      h('div', {},
+        h('h2', {}, 'Same song, same moment'),
+        h('p', { class: 'muted' }, 'Start a session and send the link. Everyone hears what the host plays, in sync, and can chat, react, suggest songs and vote to skip.'),
+        h('div', { class: 'actions' }, h('button', { class: 'btn primary big', html: `${icon('play')}Start a session`, onclick: startJam })))),
+    h('div', { class: 'jt-join' }, h('b', {}, 'Have a link?'), h('div', { class: 'jt-join-row' }, code, h('button', { class: 'btn', onclick: join }, 'Join'))),
+    h('div', { class: 'section-title' }, 'Friends listening now'), live);
+  if (!signedIn()) { live.replaceChildren(h('p', { class: 'muted' }, 'Sign in to see your friends’ sessions.')); return; }
+  live.replaceChildren(h('div', { class: 'loading-line' }, h('span', { class: 'spinner' }), 'Looking…'));
+  try {
+    const follows = await db('GET', `follows?follower=eq.${me()}&status=eq.accepted&select=followee`);
+    const ids = follows.map((f) => f.followee);
+    const jams = ids.length ? await db('GET', `jams?active=eq.true&host=in.(${ids.join(',')})&select=code,title,host`) : [];
+    if (!jams.length) { live.replaceChildren(h('p', { class: 'muted' }, 'Nobody’s in a session right now. Start one and they’ll get a notification if you choose.')); return; }
+    const people = await db('GET', `profiles?id=in.(${jams.map((j) => j.host).join(',')})&select=id,name,avatar`);
+    live.replaceChildren(...jams.map((j) => {
+      const p = people.find((x) => x.id === j.host) || {};
+      return h('div', { class: 'jt-friend' }, avatarEl(p.avatar, p.name, 'avatar'),
+        h('div', { class: 'grow min-w-0' }, h('b', {}, p.name || 'A friend'), h('div', { class: 'meta' }, j.title || 'Listening session')),
+        h('button', { class: 'btn small primary', onclick: () => confirmJoinJam(j.code) }, 'Join'));
+    }));
+  } catch (e) { live.replaceChildren(h('p', { class: 'muted' }, errMsg(e))); }
+}
+
+$('#btn-jam')?.addEventListener('click', () => (jam.code ? openJamDock() : startJam()));
+$('#jam-dock-page')?.addEventListener('click', () => showView('together'));
 
 const QUALITY = {
   waiting: ['Waiting for the host to play something…', ''],
@@ -813,8 +906,8 @@ const QUALITY = {
 
 function renderTogether() {
   const box = $('#together-panel');
-  // Only while its page is the one on screen.
-  if (!box || !box.closest('.view')?.classList.contains('active')) return;
+  // Only where it's visible: docked beside the song.
+  if (!box || box.hidden || !box.closest('#jam-dock')) return;
   if (!jam.code) {
     box.replaceChildren(h('div', { class: 'empty' },
       h('p', {}, 'Listen together'),

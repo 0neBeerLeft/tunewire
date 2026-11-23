@@ -260,6 +260,19 @@ pub async fn sync_playlist(app: AppHandle, st: State<'_, AppState>, id: String) 
 /// The custom background picture as a data: URL (the page can't read files).
 #[tauri::command]
 pub async fn background_image_data(path: String) -> AppResult<String> {
+    let (mime, bytes) = read_background(path).await?;
+    use base64::Engine;
+    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// The main color of the custom background image (the app's colors follow it).
+#[tauri::command]
+pub async fn background_image_color(path: String) -> AppResult<Option<String>> {
+    let (_, bytes) = read_background(path).await?;
+    tauri::async_runtime::spawn_blocking(move || crate::explore::dominant_color(&bytes)).await.map_err(|e| AppError::Storage(e.to_string()))
+}
+
+async fn read_background(path: String) -> AppResult<(&'static str, Vec<u8>)> {
     let mime = match std::path::Path::new(&path).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("png") => "image/png",
@@ -272,6 +285,5 @@ pub async fn background_image_data(path: String) -> AppResult<String> {
     if bytes.len() > 20 * 1024 * 1024 {
         return Err(AppError::Invalid("that image is over 20 MB".into()));
     }
-    use base64::Engine;
-    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+    Ok((mime, bytes))
 }

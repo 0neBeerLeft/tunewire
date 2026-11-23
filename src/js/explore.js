@@ -260,7 +260,6 @@ $('#search-form').addEventListener('submit', () => {
 
 // Cover-based accent -----------------------------------------------------------
 
-let accentFor = null;
 
 function hexToHsl(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -286,22 +285,76 @@ function accentVars(hex) {
   return { accent: hsl(hh, s, l), soft: hsl(hh, s, l, 0.14), contrast: light ? '#ffffff' : hsl(hh, 0.6, 0.08) };
 }
 
+/**
+ * The whole app's colors from one background color: surfaces (window,
+ * panels, hover, selection, borders) take its hue at a low saturation, text
+ * gets a faint tint, and the accent is a readable version of it. Lightness
+ * stays where the theme has it (dark or light), so text keeps its contrast.
+ */
+function paletteVars(hex, surfaces) {
+  const [hh, s0] = hexToHsl(hex);
+  const v = accentVars(hex);
+  const vars = { '--accent': v.accent, '--accent-soft': v.soft, '--accent-contrast': v.contrast, '--warn': v.accent };
+  if (surfaces) {
+    const light = document.documentElement.dataset.mode === 'light';
+    // Muted: enough to belong with the picture, not enough to shout.
+    const t = Math.min(0.55, s0) * (light ? 0.5 : 0.62);
+    const L = light
+      ? { bg: 0.955, elev: 0.985, elev2: 0.925, hover: 0.94, sel: 0.89, border: 0.86, text: 0.12, dim: 0.38, faint: 0.56 }
+      : { bg: 0.07, elev: 0.1, elev2: 0.14, hover: 0.13, sel: 0.19, border: 0.17, text: 0.93, dim: 0.7, faint: 0.47 };
+    Object.assign(vars, {
+      '--bg': hsl(hh, t, L.bg), '--bg-elev': hsl(hh, t, L.elev), '--bg-elev-2': hsl(hh, t, L.elev2),
+      '--surface-hover': hsl(hh, t, L.hover), '--selected': hsl(hh, t * 1.1, L.sel), '--border': hsl(hh, t, L.border),
+      '--text': hsl(hh, light ? 0.25 : 0.14, L.text), '--text-dim': hsl(hh, light ? 0.18 : 0.11, L.dim), '--text-faint': hsl(hh, 0.1, L.faint),
+      '--panel-border': hsl(hh, t * 1.2, light ? 0.82 : 0.2, 0.7),
+    });
+  }
+  return `:root{${Object.entries(vars).map(([k, x]) => `${k}:${x}!important`).join(';')}}`;
+}
+
+// What the app's colors currently come from ("cover:<url>", "image:<path>").
+const appColors = { key: null, seq: 0 };
+
 function clearCoverAccent() {
-  accentFor = null;
+  appColors.key = null;
+  appColors.seq++;
   $('#accent-css').textContent = '';
 }
 
-async function updateCoverAccent(thumb) {
-  if (state.settings?.cover_accent === false || !thumb) { if (!thumb) clearCoverAccent(); return; }
-  if (accentFor === thumb) return;
-  accentFor = thumb;
-  let color = null;
-  try { color = await call('cover_color', { url: imgUrl(thumb, 120) }); } catch { /* keep theme accent */ }
-  if (accentFor !== thumb) return;
-  if (!color) { $('#accent-css').textContent = ''; return; }
-  const v = accentVars(color);
-  $('#accent-css').textContent = `:root{--accent:${v.accent}!important;--accent-soft:${v.soft}!important;--accent-contrast:${v.contrast}!important;--warn:${v.accent}!important}`;
+/**
+ * Color the app after its background: the playing song's cover (art and
+ * tint backgrounds), your own picture (image background), or, with a plain
+ * background, just the accent from the cover. Settings → "Colors from the
+ * background" turns it off (the theme's own colors then).
+ */
+async function updateAppColors() {
+  const s = state.settings || {};
+  if (s.cover_accent === false) return clearCoverAccent();
+  const mode = s.background || 'art';
+  const p = state.playback;
+  const thumb = p?.version?.thumbnail || p?.current?.track?.thumbnail;
+  let source, get;
+  if (mode === 'image' && s.background_image) {
+    source = `image:${s.background_image}`;
+    get = () => call('background_image_color', { path: s.background_image });
+  } else if (thumb) {
+    source = `cover:${thumb}`;
+    get = () => call('cover_color', { url: imgUrl(thumb, 120) });
+  } else {
+    return clearCoverAccent();
+  }
+  const key = `${source}|${mode}|${document.documentElement.dataset.mode || 'dark'}`;
+  if (key === appColors.key) return;
+  appColors.key = key;
+  const seq = ++appColors.seq;
+  const color = await get().catch(() => null);
+  if (seq !== appColors.seq) return;
+  // Greyscale pictures (no color found): the theme's own colors.
+  $('#accent-css').textContent = color ? paletteVars(color, mode !== 'plain') : '';
 }
+
+/** Kept for callers from before the whole app was colored. */
+function updateCoverAccent() { return updateAppColors(); }
 
 // Full-screen lyrics -------------------------------------------------------------
 
@@ -503,6 +556,7 @@ function setAmbientLayer(css) {
 }
 
 async function updateAmbient() {
+  updateAppColors();
   const s = state.settings || {};
   const mode = s.background || 'art';
   const seq = ++ambient.seq;

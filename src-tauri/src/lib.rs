@@ -406,6 +406,7 @@ pub fn run() {
             commands::explore::spotify_user_playlists,
             commands::explore::sync_playlist,
             commands::explore::background_image_data,
+            commands::explore::background_image_color,
             playback::play_index_cmd,
             playback::next_track,
             playback::previous_track,

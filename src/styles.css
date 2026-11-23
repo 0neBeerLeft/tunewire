@@ -1754,3 +1754,18 @@ body.dragging-tracks .track:hover { background: transparent; }
 .disc-pick-check { margin-left: auto; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #000; opacity: 0; transform: scale(.6); transition: opacity .15s, transform .15s; flex: none; }
 .disc-pick-check svg.i { width: 13px; height: 13px; }
 .disc-pick.on .disc-pick-check { opacity: 1; transform: none; }
+
+/* App colors follow the background (explore.js: paletteVars). Registered so
+   they fade from one song's colors to the next instead of jumping. */
+@property --bg { syntax: '<color>'; inherits: true; initial-value: #121212; }
+@property --bg-elev { syntax: '<color>'; inherits: true; initial-value: #181818; }
+@property --bg-elev-2 { syntax: '<color>'; inherits: true; initial-value: #202020; }
+@property --surface-hover { syntax: '<color>'; inherits: true; initial-value: #1f1f1f; }
+@property --selected { syntax: '<color>'; inherits: true; initial-value: #2a2a2a; }
+@property --border { syntax: '<color>'; inherits: true; initial-value: #262626; }
+@property --text { syntax: '<color>'; inherits: true; initial-value: #ebebeb; }
+@property --text-dim { syntax: '<color>'; inherits: true; initial-value: #a0a0a0; }
+@property --text-faint { syntax: '<color>'; inherits: true; initial-value: #6c6c6c; }
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #e5a54b; }
+:root { transition: --bg 1.2s ease, --bg-elev 1.2s ease, --bg-elev-2 1.2s ease, --surface-hover 1.2s ease, --selected 1.2s ease, --border 1.2s ease, --text 1.2s ease, --text-dim 1.2s ease, --text-faint 1.2s ease, --accent 1.2s ease; }
+@media (prefers-reduced-motion: reduce) { :root { transition: none; } }

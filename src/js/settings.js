@@ -18,7 +18,7 @@ function settingToggle(label, help, key) {
     if (key === 'discord_rpc') toast(input.checked ? 'Discord Rich Presence on' : 'Discord Rich Presence off', 'ok', 1800);
     if (key === 'show_sources') document.body.classList.toggle('show-sources', input.checked);
     if (key === 'cover_accent') {
-      if (input.checked) updateCoverAccent(state.playback?.version?.thumbnail || state.playback?.current?.track?.thumbnail);
+      if (input.checked) updateAppColors();
       else clearCoverAccent();
     }
   });
@@ -129,7 +129,7 @@ function renderSettings() {
     group('Appearance', null,
       settingRow('Background', 'What shows faintly behind the panels.', backgroundControl()),
       settingRow('Background strength', null, strengthControl()),
-      settingToggle('Accent from album art', 'Tints buttons and highlights with a color from the playing song’s cover.', 'cover_accent'),
+      settingToggle('Colors from the background', 'The whole app takes its colors from the background: the playing song’s cover, or your own picture. Off: the theme’s own colors.', 'cover_accent'),
       settingToggle('Show source icons on songs', 'Always show the YouTube Music / SoundCloud / YouTube / Spotify icons on song rows (otherwise only when you hover a song).', 'show_sources')),
     group('Lyrics', null,
       settingToggle('Show lyrics', 'Fetches synced lyrics from LRCLIB (lrclib.net) for the Lyrics tab next to the queue.', 'lyrics')),

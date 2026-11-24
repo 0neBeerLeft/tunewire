@@ -3,6 +3,28 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
+## Unreleased
+
+**Songs start much faster**
+- Spotify songs start about 4× faster the first time you play them (median 0.7 s instead of 2.7 s, measured on 20 songs), and the slowest ones no longer take 20 seconds
+- YouTube and YouTube Music songs get their audio straight from YouTube (about 0.3 s instead of 2 s); yt-dlp is still there as a backup
+- Skipping is instant more often: the next three songs are prepared while one plays, and links are kept as long as they're valid
+- A source that keeps failing is skipped right away instead of holding things up
+
+**Better matches**
+- Spotify songs that are only on YouTube as a music video (like "Hotline Bling") play now
+- A live recording is no longer played in place of the studio version
+- Full Spotify albums, not just the first 50 songs
+- yt-dlp keeps itself up to date and gets a JavaScript runtime, so YouTube works more reliably
+
+**Your own server**
+- Accounts, friends and Listen together run on Tunewire's own server now (sign in once more after updating)
+- Downloads and updates come from yuhron.site/tunewire
+- The Windows installer refreshes the app icon, so the old logo no longer shows up after updating
+
+**Android (new)**
+- Tunewire for Android: the same app with a phone layout, playback that keeps going with the screen off, and controls on the lock screen and notification
+
 ## v2.3.0
 
 **New design**

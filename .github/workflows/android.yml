@@ -60,6 +60,14 @@ jobs:
       - name: Generate the Android project
         run: npx tauri android init --ci
 
+      # The generated project comes with Tauri's placeholder icon: replace
+      # the launcher icons (all densities, round and adaptive) with ours.
+      - name: App icon
+        run: |
+          npx tauri icon src-tauri/icons/icon.png
+          ls src-tauri/gen/android/app/src/main/res/ | grep mipmap
+          git checkout -- src-tauri/icons
+
       # yt-dlp's Python runs from native libraries unpacked at install
       # (youtubedl-android needs them extracted, not left inside the APK).
       - name: Patch the Android project

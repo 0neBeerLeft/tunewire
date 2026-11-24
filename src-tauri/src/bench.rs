@@ -388,3 +388,72 @@ fn debug_unmatched() {
         }
     }
 }
+
+/// The same 20 songs through what the app does now on a click: match
+/// (parallel ISRC + title, music-video fallback), stream link (native
+/// YouTube first), first audio. Compare with `bench_spotify_click`.
+///   cargo test --release --lib bench_spotify_app -- --ignored --nocapture
+#[test]
+#[ignore]
+fn bench_spotify_app() {
+    let rt = rt();
+    let _g = rt.enter();
+    rt.block_on(crate::ytdlp_worker::warm(crate::ytdlp::binary()));
+    crate::ytm::warm();
+    crate::spotify::warm();
+    let queries = [
+        "blinding lights the weeknd", "bohemian rhapsody queen", "one more time daft punk", "levitating dua lipa", "smells like teen spirit nirvana",
+        "bad guy billie eilish", "as it was harry styles", "get lucky daft punk", "rolling in the deep adele", "mr brightside the killers",
+        "lose yourself eminem", "shape of you ed sheeran", "seven nation army white stripes", "hotline bling drake", "dancing queen abba",
+        "redbone childish gambino", "take on me a-ha", "espresso sabrina carpenter", "uptown funk bruno mars", "sweater weather the neighbourhood",
+    ];
+    let mut totals = Vec::new();
+    let (mut m_ms, mut l_ms) = (Vec::new(), Vec::new());
+    let mut found = Vec::new();
+    let mut fails = 0;
+    for q in queries {
+        let Some(sp) = rt.block_on(crate::spotify::search(q, 1)).ok().and_then(|v| v.into_iter().next()) else {
+            println!("{q:<34} spotify search failed");
+            continue;
+        };
+        let t0 = Instant::now();
+        let Some(v) = rt.block_on(crate::matcher::match_spotify(&sp)) else {
+            println!("{q:<34} NO MATCH");
+            fails += 1;
+            continue;
+        };
+        let d_match = t0.elapsed();
+        let t = Instant::now();
+        let info = rt.block_on(crate::ytdlp::stream_info(&v.url));
+        let d_link = t.elapsed();
+        let t = Instant::now();
+        let ok = info.as_ref().ok().map(crate::stream::open).is_some_and(|r| r.is_ok());
+        let d_audio = t.elapsed();
+        let total = t0.elapsed();
+        println!("{q:<34} match {} link {} audio {} total {}  {}{}", ms(d_match), ms(d_link), ms(d_audio), ms(total), if ok { "ok" } else { "FAIL" }, if v.isrc_match { "" } else { " (by title/video)" });
+        if ok {
+            totals.push(total.as_millis());
+            m_ms.push(d_match.as_millis());
+            l_ms.push(d_link.as_millis());
+            found.push(v);
+        } else {
+            fails += 1;
+        }
+    }
+    let med = |v: &mut Vec<u128>| {
+        v.sort_unstable();
+        (v.get(v.len() / 2).copied().unwrap_or(0), v.get(v.len() * 9 / 10).copied().unwrap_or(0))
+    };
+    let (tm, tp) = med(&mut totals);
+    println!("\nAPP FIRST PLAY  median match {} | link {} || total median {tm} ms, p90 {tp} ms; played {} of 20, failed {fails}", med(&mut m_ms).0, med(&mut l_ms).0, totals.len());
+    let mut restart = Vec::new();
+    for v in &found {
+        crate::ytdlp::forget_stream(&v.url);
+        let t = Instant::now();
+        if let Ok(info) = rt.block_on(crate::ytdlp::stream_info(&v.url)) {
+            let _ = crate::stream::open(&info);
+        }
+        restart.push(t.elapsed().as_millis());
+    }
+    println!("APP MATCHED     median {} ms (match saved, new link)", med(&mut restart).0);
+}

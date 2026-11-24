@@ -110,9 +110,10 @@ async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
     Ok(v)
 }
 
-/// After this long without an answer, the same request goes out a second time
-/// and whichever answers first wins (YouTube Music sometimes stalls for 5-10 s).
-const HEDGE_AFTER: Duration = Duration::from_millis(1500);
+/// After this long without an answer (most take ~0.45 s), the same request goes
+/// out a second time and whichever answers first wins (YouTube Music sometimes
+/// stalls for 5-10 s).
+const HEDGE_AFTER: Duration = Duration::from_millis(900);
 
 async fn hedged(endpoint: &str, extra: Value) -> AppResult<Value> {
     let send = |ep: String, extra: Value| tauri::async_runtime::spawn_blocking(move || post_blocking(&ep, extra));

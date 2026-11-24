@@ -140,7 +140,15 @@ async fn match_cached(sp: &TrackVersion, waiting: bool) -> Option<TrackVersion> 
             return e.v;
         }
     }
-    let found = if waiting { find_fast(sp).await } else { find(sp).await };
+    let found = if waiting {
+        // Both searches failing outright is usually a passing YouTube Music hiccup.
+        match find_fast(sp).await {
+            Err(_) => find(sp).await,
+            r => r,
+        }
+    } else {
+        find(sp).await
+    };
     let Ok(found) = found else { return None }; // network trouble: don't remember
     if let Some(m) = MATCHES.locked().as_mut() {
         m.insert(sp.id.clone(), Entry { v: found.clone(), at: now_ms() });

@@ -63,6 +63,7 @@ mod sync_ext;
 mod themes;
 mod ytdlp;
 mod ytdlp_worker;
+mod ytnative;
 mod ytm;
 
 #[cfg(test)]
@@ -170,6 +171,7 @@ pub fn run() {
             let data = app.path().app_data_dir()?;
             let cache = app.path().app_cache_dir().unwrap_or_else(|_| data.join("cache"));
             stream::set_cache_dir(cache.join("streams"));
+            ytnative::init(&cache);
             let store = Store::open(data.clone())?;
             secrets::set_dir(&data);
             #[cfg(target_os = "android")]

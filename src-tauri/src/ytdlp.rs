@@ -391,6 +391,31 @@ pub async fn extract_stream(url: &str) -> AppResult<StreamInfo> {
             return Ok(info);
         }
     }
+    // YouTube's player API directly (~0.3 s, yt-dlp: ~2 s). If it hasn't
+    // answered after NATIVE_HEAD_START, yt-dlp starts too and the first good
+    // answer wins; if it fails, yt-dlp alone.
+    if crate::search::native_apis() && crate::ytnative::usable() && crate::ytnative::video_id(url).is_some() {
+        const NATIVE_HEAD_START: Duration = Duration::from_millis(1200);
+        let native = crate::ytnative::stream_tracked(url);
+        tokio::pin!(native);
+        tokio::select! {
+            r = &mut native => if let Ok(info) = r { return Ok(info) },
+            _ = tokio::time::sleep(NATIVE_HEAD_START) => {
+                let fallback = extract_stream_with_format(url, AUDIO_FORMAT);
+                tokio::pin!(fallback);
+                return tokio::select! {
+                    r = &mut native => match r {
+                        Ok(info) => Ok(info),
+                        Err(_) => fallback.await,
+                    },
+                    r = &mut fallback => match r {
+                        Ok(info) => Ok(info),
+                        Err(e) => native.await.map_err(|_| e),
+                    },
+                };
+            }
+        }
+    }
     extract_stream_with_format(url, AUDIO_FORMAT).await
 }
 

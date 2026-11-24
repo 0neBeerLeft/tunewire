@@ -289,10 +289,26 @@ fn bench_spotify_click() {
     let _g = rt.enter();
     rt.block_on(crate::ytdlp_worker::warm(crate::ytdlp::binary()));
     let queries = [
-        "blinding lights the weeknd", "bohemian rhapsody queen", "one more time daft punk", "levitating dua lipa", "smells like teen spirit nirvana",
-        "bad guy billie eilish", "as it was harry styles", "get lucky daft punk", "rolling in the deep adele", "mr brightside the killers",
-        "lose yourself eminem", "shape of you ed sheeran", "seven nation army white stripes", "hotline bling drake", "dancing queen abba",
-        "redbone childish gambino", "take on me a-ha", "espresso sabrina carpenter", "uptown funk bruno mars", "sweater weather the neighbourhood",
+        "blinding lights the weeknd",
+        "bohemian rhapsody queen",
+        "one more time daft punk",
+        "levitating dua lipa",
+        "smells like teen spirit nirvana",
+        "bad guy billie eilish",
+        "as it was harry styles",
+        "get lucky daft punk",
+        "rolling in the deep adele",
+        "mr brightside the killers",
+        "lose yourself eminem",
+        "shape of you ed sheeran",
+        "seven nation army white stripes",
+        "hotline bling drake",
+        "dancing queen abba",
+        "redbone childish gambino",
+        "take on me a-ha",
+        "espresso sabrina carpenter",
+        "uptown funk bruno mars",
+        "sweater weather the neighbourhood",
     ];
     let t0 = Instant::now();
     let warm = rt.block_on(crate::spotify::search("warm up", 1));
@@ -327,7 +343,16 @@ fn bench_spotify_click() {
         let opened = info.as_ref().ok().map(crate::stream::open);
         let d_audio = t.elapsed();
         let ok = matches!(opened, Some(Ok(_)));
-        println!("{q:<32} isrc {} by-isrc {} by-title {} link {} audio {}  {}{}", ms(d_isrc), ms(d_by_isrc), ms(d_by_title), ms(d_link), ms(d_audio), if ok { "ok" } else { "FAIL" }, if isrc.is_some() { "" } else { " (no isrc)" });
+        println!(
+            "{q:<32} isrc {} by-isrc {} by-title {} link {} audio {}  {}{}",
+            ms(d_isrc),
+            ms(d_by_isrc),
+            ms(d_by_title),
+            ms(d_link),
+            ms(d_audio),
+            if ok { "ok" } else { "FAIL" },
+            if isrc.is_some() { "" } else { " (no isrc)" }
+        );
         rows.push([d_isrc, d_by_isrc, d_by_title, d_link, d_audio]);
         found.push(v);
     }
@@ -341,8 +366,17 @@ fn bench_spotify_click() {
         t.sort_unstable();
         t
     };
-    println!("\nFIRST PLAY  median: isrc {} | by-isrc {} | by-title {} | link {} | audio {} || total median {} ms, p90 {} ms ({} songs)",
-        med(0), med(1), med(2), med(3), med(4), total.get(total.len() / 2).unwrap_or(&0), total.get(total.len() * 9 / 10).unwrap_or(&0), rows.len());
+    println!(
+        "\nFIRST PLAY  median: isrc {} | by-isrc {} | by-title {} | link {} | audio {} || total median {} ms, p90 {} ms ({} songs)",
+        med(0),
+        med(1),
+        med(2),
+        med(3),
+        med(4),
+        total.get(total.len() / 2).unwrap_or(&0),
+        total.get(total.len() * 9 / 10).unwrap_or(&0),
+        rows.len()
+    );
     // Already matched, link cached (same session): just opening the audio.
     let mut again = Vec::new();
     for v in &found {
@@ -402,10 +436,26 @@ fn bench_spotify_app() {
     crate::ytm::warm();
     crate::spotify::warm();
     let queries = [
-        "blinding lights the weeknd", "bohemian rhapsody queen", "one more time daft punk", "levitating dua lipa", "smells like teen spirit nirvana",
-        "bad guy billie eilish", "as it was harry styles", "get lucky daft punk", "rolling in the deep adele", "mr brightside the killers",
-        "lose yourself eminem", "shape of you ed sheeran", "seven nation army white stripes", "hotline bling drake", "dancing queen abba",
-        "redbone childish gambino", "take on me a-ha", "espresso sabrina carpenter", "uptown funk bruno mars", "sweater weather the neighbourhood",
+        "blinding lights the weeknd",
+        "bohemian rhapsody queen",
+        "one more time daft punk",
+        "levitating dua lipa",
+        "smells like teen spirit nirvana",
+        "bad guy billie eilish",
+        "as it was harry styles",
+        "get lucky daft punk",
+        "rolling in the deep adele",
+        "mr brightside the killers",
+        "lose yourself eminem",
+        "shape of you ed sheeran",
+        "seven nation army white stripes",
+        "hotline bling drake",
+        "dancing queen abba",
+        "redbone childish gambino",
+        "take on me a-ha",
+        "espresso sabrina carpenter",
+        "uptown funk bruno mars",
+        "sweater weather the neighbourhood",
     ];
     let mut totals = Vec::new();
     let (mut m_ms, mut l_ms) = (Vec::new(), Vec::new());
@@ -430,7 +480,15 @@ fn bench_spotify_app() {
         let ok = info.as_ref().ok().map(crate::stream::open).is_some_and(|r| r.is_ok());
         let d_audio = t.elapsed();
         let total = t0.elapsed();
-        println!("{q:<34} match {} link {} audio {} total {}  {}{}", ms(d_match), ms(d_link), ms(d_audio), ms(total), if ok { "ok" } else { "FAIL" }, if v.isrc_match { "" } else { " (by title/video)" });
+        println!(
+            "{q:<34} match {} link {} audio {} total {}  {}{}",
+            ms(d_match),
+            ms(d_link),
+            ms(d_audio),
+            ms(total),
+            if ok { "ok" } else { "FAIL" },
+            if v.isrc_match { "" } else { " (by title/video)" }
+        );
         if ok {
             totals.push(total.as_millis());
             m_ms.push(d_match.as_millis());

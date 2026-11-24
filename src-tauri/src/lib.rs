@@ -63,8 +63,8 @@ mod sync_ext;
 mod themes;
 mod ytdlp;
 mod ytdlp_worker;
-mod ytnative;
 mod ytm;
+mod ytnative;
 
 #[cfg(test)]
 mod bench;

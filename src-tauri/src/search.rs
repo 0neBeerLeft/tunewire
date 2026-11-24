@@ -1039,7 +1039,16 @@ mod tests {
     #[test]
     fn versions_that_must_not_match() {
         let base = v(Platform::Spotify, "Blinding Lights", "The Weeknd", Some(200.0), 0);
-        for other in ["Blinding Lights (Remix)", "Blinding Lights - Instrumental", "Blinding Lights (Acoustic)", "Blinding Lights (Sped Up)", "Blinding Lights (Slowed + Reverb)", "Blinding Lights - Radio Edit", "Blinding Lights (Cover)", "Blinding Lights (Extended Mix)"] {
+        for other in [
+            "Blinding Lights (Remix)",
+            "Blinding Lights - Instrumental",
+            "Blinding Lights (Acoustic)",
+            "Blinding Lights (Sped Up)",
+            "Blinding Lights (Slowed + Reverb)",
+            "Blinding Lights - Radio Edit",
+            "Blinding Lights (Cover)",
+            "Blinding Lights (Extended Mix)",
+        ] {
             assert!(!same_recording(&base, &v(Platform::Ytmusic, other, "The Weeknd", Some(200.0), 0)), "{other}");
         }
         // Packaging only: same recording.

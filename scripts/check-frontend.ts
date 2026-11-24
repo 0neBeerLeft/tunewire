@@ -11,7 +11,6 @@ const walk = async (dir: string) => {
 const root = new URL("..", import.meta.url).pathname;
 await walk(`${root}src`);
 await walk(`${root}dev`);
-files.push(`${root}docs/config.js`);
 let bad = 0;
 for (const f of files) {
   try {

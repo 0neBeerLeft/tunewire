@@ -37,7 +37,11 @@ fn client_version() -> String {
     *WEB_REMIX_VERSION.locked() = Some(WEB_REMIX_FALLBACK.into());
     std::thread::spawn(|| {
         let page = crate::http::agent().get("https://music.youtube.com/").header("User-Agent", crate::http::USER_AGENT).call().ok().and_then(|mut r| r.body_mut().read_to_string().ok());
-        let found = page.as_deref().and_then(|p| p.split("\"INNERTUBE_CLIENT_VERSION\":\"").nth(1)).and_then(|s| s.split('"').next()).filter(|v| v.starts_with("1.") && v.len() < 24 && v.chars().all(|c| c.is_ascii_digit() || c == '.'));
+        let found = page
+            .as_deref()
+            .and_then(|p| p.split("\"INNERTUBE_CLIENT_VERSION\":\"").nth(1))
+            .and_then(|s| s.split('"').next())
+            .filter(|v| v.starts_with("1.") && v.len() < 24 && v.chars().all(|c| c.is_ascii_digit() || c == '.'));
         if let Some(v) = found {
             *WEB_REMIX_VERSION.locked() = Some(v.to_string());
         }
@@ -921,7 +925,15 @@ mod live_debug {
             let v = super::post_blocking("search", serde_json::json!({ "query": q, "params": super::F_SONGS })).unwrap();
             let secs = super::search_sections(&v);
             let kinds: Vec<String> = secs.iter().map(|s| s.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>().join("+")).unwrap_or_default()).collect();
-            let songs: Vec<String> = secs.iter().filter_map(|s| s.get("musicShelfRenderer")).flat_map(super::shelf_items).filter_map(|c| c.track).filter_map(|t| t.versions.into_iter().next()).take(3).map(|v| format!("{} / {}", v.title, v.artist)).collect();
+            let songs: Vec<String> = secs
+                .iter()
+                .filter_map(|s| s.get("musicShelfRenderer"))
+                .flat_map(super::shelf_items)
+                .filter_map(|c| c.track)
+                .filter_map(|t| t.versions.into_iter().next())
+                .take(3)
+                .map(|v| format!("{} / {}", v.title, v.artist))
+                .collect();
             println!("{q:<24} sections {kinds:?} songs {songs:?}");
         }
         let page = crate::http::agent().get("https://music.youtube.com/").header("User-Agent", crate::http::USER_AGENT).call().unwrap().body_mut().read_to_string().unwrap();

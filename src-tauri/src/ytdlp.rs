@@ -72,9 +72,8 @@ async fn run_once(args: &[String], timeout: Duration) -> AppResult<String> {
     let handle = ANDROID.get().cloned().ok_or(AppError::YtDlpMissing)?;
     let args = args.to_vec();
     let job = tauri::async_runtime::spawn_blocking(move || handle.execute(&args));
-    let out = tokio::time::timeout(timeout, job).await.map_err(|_| AppError::Timeout("yt-dlp took too long to respond".into()))?
-        .map_err(|e| AppError::YtDlp(e.to_string()))?
-        .map_err(AppError::YtDlp)?;
+    let out =
+        tokio::time::timeout(timeout, job).await.map_err(|_| AppError::Timeout("yt-dlp took too long to respond".into()))?.map_err(|e| AppError::YtDlp(e.to_string()))?.map_err(AppError::YtDlp)?;
     if out.code == 0 || (!out.stdout.trim().is_empty() && out.stdout.trim_start().starts_with('{')) {
         Ok(out.stdout)
     } else {
@@ -620,11 +619,8 @@ fn install_deno(dir: &std::path::Path) -> AppResult<()> {
         .body_mut()
         .read_to_string()
         .map_err(|e| AppError::Network(e.to_string()))?;
-    let expected = sums
-        .split_whitespace()
-        .find(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
-        .map(str::to_lowercase)
-        .ok_or_else(|| AppError::Extraction("Deno checksum not found".into()))?;
+    let expected =
+        sums.split_whitespace().find(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit())).map(str::to_lowercase).ok_or_else(|| AppError::Extraction("Deno checksum not found".into()))?;
     let mut data = Vec::new();
     agent
         .get(&format!("{base}/{asset}"))

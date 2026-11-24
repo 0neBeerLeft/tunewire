@@ -32,12 +32,7 @@ fn client() -> AppResult<&'static RustyPipe> {
     }
     let dir = DIR.locked().clone().unwrap_or_else(|| std::env::temp_dir().join("tunewire-rustypipe"));
     let _ = std::fs::create_dir_all(&dir);
-    let c = RustyPipe::builder()
-        .storage_dir(dir)
-        .timeout(Duration::from_secs(8))
-        .n_http_retries(1)
-        .build()
-        .map_err(|e| AppError::Extraction(format!("YouTube client: {e}")))?;
+    let c = RustyPipe::builder().storage_dir(dir).timeout(Duration::from_secs(8)).n_http_retries(1).build().map_err(|e| AppError::Extraction(format!("YouTube client: {e}")))?;
     Ok(CLIENT.get_or_init(|| c))
 }
 
@@ -61,12 +56,7 @@ fn pick(streams: &[AudioStream]) -> Option<&AudioStream> {
     let usable = |s: &&AudioStream| s.drm_track_type.is_none() && s.track.as_ref().is_none_or(|t| t.is_default) && !s.url.is_empty();
     let aac_lc = |s: &&AudioStream| s.codec == AudioCodec::Mp4a && s.mime.contains("mp4a.40.2");
     let opus = |s: &&AudioStream| s.codec == AudioCodec::Opus;
-    streams
-        .iter()
-        .filter(usable)
-        .filter(aac_lc)
-        .max_by_key(|s| s.bitrate)
-        .or_else(|| streams.iter().filter(usable).filter(opus).max_by_key(|s| s.bitrate))
+    streams.iter().filter(usable).filter(aac_lc).max_by_key(|s| s.bitrate).or_else(|| streams.iter().filter(usable).filter(opus).max_by_key(|s| s.bitrate))
 }
 
 /// Failures in a row; after FAIL_LIMIT the native path rests for REST.
@@ -101,10 +91,7 @@ pub async fn stream_tracked(url: &str) -> AppResult<StreamInfo> {
 pub async fn stream(url: &str) -> AppResult<StreamInfo> {
     let id = video_id(url).ok_or_else(|| AppError::Invalid("not a YouTube video link".into()))?;
     let rp = client()?;
-    let player = tokio::time::timeout(TIMEOUT, rp.query().player(&id))
-        .await
-        .map_err(|_| AppError::Timeout("YouTube took too long".into()))?
-        .map_err(|e| AppError::Extraction(e.to_string()))?;
+    let player = tokio::time::timeout(TIMEOUT, rp.query().player(&id)).await.map_err(|_| AppError::Timeout("YouTube took too long".into()))?.map_err(|e| AppError::Extraction(e.to_string()))?;
     if player.details.is_live {
         return Err(AppError::Unsupported("live streams go through yt-dlp".into()));
     }

@@ -602,7 +602,11 @@ pub(crate) fn fetch_album_full(id: &str) -> AppResult<(String, Vec<Track>)> {
             if !uri.starts_with("spotify:track:") {
                 continue;
             }
-            let artist = t.pointer("/artists/items").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.pointer("/profile/name").and_then(Value::as_str)).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+            let artist = t
+                .pointer("/artists/items")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(|x| x.pointer("/profile/name").and_then(Value::as_str)).collect::<Vec<_>>().join(", "))
+                .unwrap_or_default();
             let dur = t.pointer("/duration/totalMilliseconds").or_else(|| t.pointer("/trackDuration/totalMilliseconds")).and_then(Value::as_f64);
             let mut v = version(name, &artist, dur, uri, thumb.clone());
             v.album = Some(title.clone());

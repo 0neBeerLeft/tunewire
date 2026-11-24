@@ -57,6 +57,7 @@ tauri-plugin-deep-link = "2"
 # Android runs yt-dlp through youtubedl-android (bundled Python + yt-dlp).
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-ytdlp-android = { path = "plugins/ytdlp-android" }
+tauri-plugin-media-android = { path = "plugins/media-android" }
 # rustypipe's JavaScript engine has no ready-made Android bindings: generate them.
 rquickjs-sys = { version = "0.9", features = ["bindgen"] }
 

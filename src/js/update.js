@@ -18,6 +18,11 @@ async function appVersion() {
  * checks download the update quietly, then show a "Restart to update" pill.
  */
 async function checkForUpdate(manual = false) {
+  // Android: new versions are APKs on the download server (js/mobile.js).
+  if (/Android/i.test(navigator.userAgent)) {
+    if (typeof androidUpdateCheck === 'function') androidUpdateCheck(manual);
+    return;
+  }
   if (updater.checking) return;
   if (updater.ready) { if (manual) promptRestart(); return; }
   updater.checking = true;

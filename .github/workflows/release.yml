@@ -97,3 +97,11 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # The Android app (APK), attached to the same release.
+  android:
+    needs: build
+    uses: ./.github/workflows/android.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    secrets: inherit

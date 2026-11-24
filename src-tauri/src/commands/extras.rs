@@ -140,6 +140,16 @@ pub fn set_lastfm_app(st: State<'_, AppState>, key: String, secret: String) -> A
     Ok(())
 }
 
+/// Open a web page in the browser (on Android: downloads such as app updates).
+#[tauri::command]
+pub fn open_link(url: String) -> AppResult<()> {
+    crate::ytdlp::validate_url(&url)?;
+    if !url.starts_with("https://") {
+        return Err(AppError::Invalid("only https links".into()));
+    }
+    crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))
+}
+
 /// Opens Last.fm's approval page and waits (up to 3 minutes) for the user.
 #[tauri::command]
 pub async fn lastfm_connect(st: State<'_, AppState>) -> AppResult<String> {

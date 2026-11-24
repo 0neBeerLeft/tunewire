@@ -163,7 +163,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(tauri_plugin_ytdlp_android::init());
+    let builder = builder.plugin(tauri_plugin_ytdlp_android::init()).plugin(tauri_plugin_media_android::init());
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -364,6 +364,7 @@ pub fn run() {
             system::report_error,
             system::reports_available,
             system::ytdlp_install,
+            extras::open_link,
             discover::search_tracks,
             discover::load_playlist,
             discover::extract_stream_url,

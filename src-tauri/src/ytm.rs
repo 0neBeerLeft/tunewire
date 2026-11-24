@@ -23,8 +23,35 @@ const F_COMMUNITY_PLAYLISTS: &str = "EgeKAQQoAEABagwQDhAKEAMQBBAJEAU=";
 // Transport + small cache
 // ---------------------------------------------------------------------------
 
+/// Used until the live version is known (and if it can't be read).
+const WEB_REMIX_FALLBACK: &str = "1.20261122.17.00";
+static WEB_REMIX_VERSION: Mutex<Option<String>> = Mutex::new(None);
+
+/// The web client version music.youtube.com itself sends right now. An old
+/// version gets slower and stranger answers; read once from the home page.
+fn client_version() -> String {
+    if let Some(v) = WEB_REMIX_VERSION.locked().clone() {
+        return v;
+    }
+    // Remember the fallback first: one slow read, not one per request.
+    *WEB_REMIX_VERSION.locked() = Some(WEB_REMIX_FALLBACK.into());
+    std::thread::spawn(|| {
+        let page = crate::http::agent().get("https://music.youtube.com/").header("User-Agent", crate::http::USER_AGENT).call().ok().and_then(|mut r| r.body_mut().read_to_string().ok());
+        let found = page.as_deref().and_then(|p| p.split("\"INNERTUBE_CLIENT_VERSION\":\"").nth(1)).and_then(|s| s.split('"').next()).filter(|v| v.starts_with("1.") && v.len() < 24 && v.chars().all(|c| c.is_ascii_digit() || c == '.'));
+        if let Some(v) = found {
+            *WEB_REMIX_VERSION.locked() = Some(v.to_string());
+        }
+    });
+    WEB_REMIX_FALLBACK.into()
+}
+
+/// Warm up at startup: the current client version.
+pub fn warm() {
+    let _ = client_version();
+}
+
 fn post_blocking(endpoint: &str, extra: Value) -> AppResult<Value> {
-    post_blocking_to("https://music.youtube.com", "WEB_REMIX", "1.20250101.01.00", endpoint, extra)
+    post_blocking_to("https://music.youtube.com", "WEB_REMIX", &client_version(), endpoint, extra)
 }
 
 fn post_blocking_to(origin: &str, client: &str, version: &str, endpoint: &str, extra: Value) -> AppResult<Value> {
@@ -67,8 +94,7 @@ async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
             return Ok(serde_json::from_str(&text)?);
         }
     }
-    let ep = endpoint.to_string();
-    let v = tauri::async_runtime::spawn_blocking(move || post_blocking(&ep, extra)).await.map_err(|e| AppError::Network(e.to_string()))??;
+    let v = hedged(endpoint, extra).await?;
     let text: std::sync::Arc<str> = serde_json::to_string(&v)?.into();
     let mut g = CACHE.locked();
     let m = g.get_or_insert_with(HashMap::new);
@@ -82,6 +108,33 @@ async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
     }
     m.insert(key, (Instant::now(), text));
     Ok(v)
+}
+
+/// After this long without an answer, the same request goes out a second time
+/// and whichever answers first wins (YouTube Music sometimes stalls for 5-10 s).
+const HEDGE_AFTER: Duration = Duration::from_millis(1500);
+
+async fn hedged(endpoint: &str, extra: Value) -> AppResult<Value> {
+    let send = |ep: String, extra: Value| tauri::async_runtime::spawn_blocking(move || post_blocking(&ep, extra));
+    let first = send(endpoint.to_string(), extra.clone());
+    tokio::pin!(first);
+    tokio::select! {
+        r = &mut first => return r.map_err(|e| AppError::Network(e.to_string()))?,
+        _ = tokio::time::sleep(HEDGE_AFTER) => {}
+    }
+    let second = send(endpoint.to_string(), extra);
+    tokio::pin!(second);
+    // First good answer wins; if one fails, wait for the other.
+    tokio::select! {
+        r = &mut first => match r.map_err(|e| AppError::Network(e.to_string()))? {
+            Ok(v) => Ok(v),
+            Err(_) => second.await.map_err(|e| AppError::Network(e.to_string()))?,
+        },
+        r = &mut second => match r.map_err(|e| AppError::Network(e.to_string()))? {
+            Ok(v) => Ok(v),
+            Err(_) => first.await.map_err(|e| AppError::Network(e.to_string()))?,
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -854,5 +907,24 @@ mod tests {
         println!("mood page {}: {:?}", m[0].items[0].title, page.iter().map(|s| (&s.title, s.cards.len())).collect::<Vec<_>>());
         let songs = rt.block_on(search_songs("GBARL9300135")).unwrap();
         assert_eq!(songs[0].title, "Never Gonna Give You Up");
+    }
+}
+
+#[cfg(test)]
+mod live_debug {
+    /// What the songs search returns for a query (sections and first items).
+    #[test]
+    #[ignore]
+    fn raw_song_search() {
+        for q in ["Drake Hotline Bling", "Hotline Bling Drake", "Hotline Bling"] {
+            let v = super::post_blocking("search", serde_json::json!({ "query": q, "params": super::F_SONGS })).unwrap();
+            let secs = super::search_sections(&v);
+            let kinds: Vec<String> = secs.iter().map(|s| s.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>().join("+")).unwrap_or_default()).collect();
+            let songs: Vec<String> = secs.iter().filter_map(|s| s.get("musicShelfRenderer")).flat_map(super::shelf_items).filter_map(|c| c.track).filter_map(|t| t.versions.into_iter().next()).take(3).map(|v| format!("{} / {}", v.title, v.artist)).collect();
+            println!("{q:<24} sections {kinds:?} songs {songs:?}");
+        }
+        let page = crate::http::agent().get("https://music.youtube.com/").header("User-Agent", crate::http::USER_AGENT).call().unwrap().body_mut().read_to_string().unwrap();
+        let ver = page.split("\"INNERTUBE_CLIENT_VERSION\":\"").nth(1).and_then(|s| s.split('"').next());
+        println!("current web client version: {ver:?}");
     }
 }

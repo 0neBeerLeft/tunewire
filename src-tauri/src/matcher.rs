@@ -119,7 +119,7 @@ static FOREGROUND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsi
 /// until it's done.
 pub async fn match_spotify(sp: &TrackVersion) -> Option<TrackVersion> {
     FOREGROUND.fetch_add(1, Ordering::SeqCst);
-    let r = match_cached(sp).await;
+    let r = match_cached(sp, true).await;
     FOREGROUND.fetch_sub(1, Ordering::SeqCst);
     r
 }
@@ -129,18 +129,18 @@ async fn match_background(sp: &TrackVersion) -> Option<TrackVersion> {
     while FOREGROUND.load(Ordering::SeqCst) > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
-    match_cached(sp).await
+    match_cached(sp, false).await
 }
 
 /// Find the YouTube Music recording of a Spotify track: by ISRC (the exact
 /// recording), else by artist + title + length. Saved either way.
-async fn match_cached(sp: &TrackVersion) -> Option<TrackVersion> {
+async fn match_cached(sp: &TrackVersion, waiting: bool) -> Option<TrackVersion> {
     if let Some(e) = entry(&sp.id) {
         if e.v.is_some() || e.at + RETRY_MS >= now_ms() {
             return e.v;
         }
     }
-    let found = find(sp).await;
+    let found = if waiting { find_fast(sp).await } else { find(sp).await };
     let Ok(found) = found else { return None }; // network trouble: don't remember
     if let Some(m) = MATCHES.locked().as_mut() {
         m.insert(sp.id.clone(), Entry { v: found.clone(), at: now_ms() });
@@ -167,7 +167,58 @@ async fn find(sp: &TrackVersion) -> AppResult<Option<TrackVersion>> {
     }
     let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
     let found = ytm_songs(query).await?;
-    Ok(found.into_iter().take(6).find(|v| crate::search::same_recording(sp, v)).map(|v| finish(v, false)))
+    if let Some(v) = found.into_iter().take(6).find(|v| crate::search::same_recording(sp, v)) {
+        return Ok(Some(finish(v, false)));
+    }
+    Ok(video_fallback(sp).await.map(|v| finish(v, false)))
+}
+
+/// Some songs aren't in YouTube Music's song catalogue at all, only as a
+/// music video ("Hotline Bling"): the official video of the same song by the
+/// same artist, when there's no audio upload.
+async fn video_fallback(sp: &TrackVersion) -> Option<TrackVersion> {
+    let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
+    let (found, _) = crate::search::search_platform(Platform::Youtube, query, 8, &crate::search::SearchCache::default()).await.ok()?;
+    found.into_iter().take(5).find(|v| crate::search::same_song_as_video(sp, v))
+}
+
+/// `find` for a song someone is waiting for: the ISRC lookup and the title
+/// search run at the same time, and the title search's best guess starts
+/// loading its stream right away (usually the same recording the ISRC finds).
+/// The ISRC answer still wins whenever there is one: same result as `find`,
+/// in the time of the slower step instead of both added up.
+async fn find_fast(sp: &TrackVersion) -> AppResult<Option<TrackVersion>> {
+    let by_isrc = async {
+        match crate::spotify::isrc(&sp.id).await {
+            Ok(Some(isrc)) => ytm_songs(isrc).await.map(|v| v.into_iter().next().filter(|v| crate::search::same_title(sp, v))),
+            _ => Ok(None),
+        }
+    };
+    let by_title = async {
+        let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
+        let found = ytm_songs(query).await?;
+        let best = found.into_iter().take(6).find(|v| crate::search::same_recording(sp, v));
+        if let Some(v) = &best {
+            crate::ytdlp::prefetch_stream(v.url.clone());
+        }
+        AppResult::Ok(best)
+    };
+    let (isrc, title) = tokio::join!(by_isrc, by_title);
+    let finish = |mut v: TrackVersion, isrc: bool| {
+        v.matched_for = Some(Platform::Spotify);
+        v.isrc_match = isrc;
+        if v.album.is_none() {
+            v.album = sp.album.clone();
+        }
+        v
+    };
+    if let Ok(Some(v)) = isrc {
+        return Ok(Some(finish(v, true)));
+    }
+    if let Some(v) = title? {
+        return Ok(Some(finish(v, false)));
+    }
+    Ok(video_fallback(sp).await.map(|v| finish(v, false)))
 }
 
 #[derive(Clone, Serialize)]

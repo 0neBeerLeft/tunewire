@@ -80,9 +80,10 @@ pub async fn load(url: &str) -> AppResult<RemotePlaylist> {
     let (kind, id) = parse_url(url).ok_or_else(|| AppError::Invalid("not a Spotify link".into()))?;
     // Playlists: the web player's paginated query has every track (the embed
     // page stops at 50). The embed page stays as the fallback.
-    if kind == "playlist" {
-        let i2 = id.clone();
-        if let Ok(Ok((title, tracks))) = tauri::async_runtime::spawn_blocking(move || fetch_playlist_full(&i2)).await {
+    if kind == "playlist" || kind == "album" {
+        let (k2, i2) = (kind.clone(), id.clone());
+        let full = tauri::async_runtime::spawn_blocking(move || if k2 == "album" { fetch_album_full(&i2) } else { fetch_playlist_full(&i2) }).await;
+        if let Ok(Ok((title, tracks))) = full {
             if !tracks.is_empty() {
                 return Ok(RemotePlaylist { title, url: url.to_string(), platform: Some(Platform::Spotify), tracks });
             }
@@ -549,6 +550,83 @@ pub(crate) fn fetch_playlist_full(id: &str) -> AppResult<(String, Vec<Track>)> {
         }
     }
     Ok((title, tracks))
+}
+
+static ALBUM_HASH: Mutex<Option<String>> = Mutex::new(None);
+
+/// Every track of an album (the embed page stops at 50), 50 per request.
+pub(crate) fn fetch_album_full(id: &str) -> AppResult<(String, Vec<Track>)> {
+    if !id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(AppError::Invalid("malformed Spotify id".into()));
+    }
+    let mut tok = token(false)?;
+    let mut hash = match ALBUM_HASH.locked().clone() {
+        Some(h) => h,
+        None => discover_op_hash("getAlbum")?,
+    };
+    *ALBUM_HASH.locked() = Some(hash.clone());
+    let (mut title, mut tracks, mut offset, mut retried) = (String::from("Spotify album"), Vec::new(), 0usize, false);
+    loop {
+        let vars = serde_json::json!({ "uri": format!("spotify:album:{id}"), "locale": "", "offset": offset, "limit": 50 });
+        let (status, v) = pathfinder("getAlbum", &hash, vars, &tok)?;
+        let unknown = v.to_string().contains("PersistedQueryNotFound");
+        match status {
+            401 if !retried => {
+                tok = token(true)?;
+                retried = true;
+                continue;
+            }
+            _ if (unknown || status == 400 || status == 404) && !retried => {
+                hash = discover_op_hash("getAlbum")?;
+                *ALBUM_HASH.locked() = Some(hash.clone());
+                retried = true;
+                continue;
+            }
+            200 => {}
+            s => return Err(AppError::Network(format!("Spotify album request failed (HTTP {s})"))),
+        }
+        let al = v.pointer("/data/albumUnion").ok_or_else(|| AppError::Unavailable("Spotify returned no album".into()))?;
+        if let Some(n) = al.get("name").and_then(Value::as_str) {
+            title = n.to_string();
+        }
+        let thumb = al
+            .pointer("/coverArt/sources")
+            .and_then(Value::as_array)
+            .and_then(|s| s.iter().min_by_key(|x| (x.get("width").and_then(Value::as_i64).unwrap_or(0) - 300).abs()).and_then(|x| x.get("url").and_then(Value::as_str)).map(str::to_string));
+        let list = al.get("tracksV2").or_else(|| al.get("tracks"));
+        let items = list.and_then(|t| t.get("items")).and_then(Value::as_array).cloned().unwrap_or_default();
+        let total = list.and_then(|t| t.get("totalCount")).and_then(Value::as_u64).unwrap_or(0) as usize;
+        for it in &items {
+            let t = it.get("track").unwrap_or(it);
+            let (Some(uri), Some(name)) = (t.get("uri").and_then(Value::as_str), t.get("name").and_then(Value::as_str)) else { continue };
+            if !uri.starts_with("spotify:track:") {
+                continue;
+            }
+            let artist = t.pointer("/artists/items").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.pointer("/profile/name").and_then(Value::as_str)).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+            let dur = t.pointer("/duration/totalMilliseconds").or_else(|| t.pointer("/trackDuration/totalMilliseconds")).and_then(Value::as_f64);
+            let mut v = version(name, &artist, dur, uri, thumb.clone());
+            v.album = Some(title.clone());
+            tracks.push(build_track(vec![v], 0.0));
+        }
+        offset += items.len();
+        if items.is_empty() || offset >= total || offset >= 2_000 {
+            break;
+        }
+    }
+    Ok((title, tracks))
+}
+
+#[cfg(test)]
+mod album_tests {
+    /// Run by hand: an album comes back complete through the web player's query.
+    #[test]
+    #[ignore]
+    fn live_full_album() {
+        // Daft Punk, Discovery (14 tracks).
+        let (title, tracks) = super::fetch_album_full("2noRn2Aes5aoNVsU6iWThc").expect("album");
+        println!("{title}: {} tracks; first {:?}", tracks.len(), tracks.first().map(|t| &t.versions[0].title));
+        assert!(!tracks.is_empty());
+    }
 }
 
 // ---------------------------------------------------------------------------

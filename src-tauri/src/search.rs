@@ -43,6 +43,8 @@ const VARIANT_MARKERS: &[&str] = &[
     "orchestral",
     "piano",
     "demo",
+    // A live recording is a different recording ("Song (Live at Wembley)").
+    "live",
 ];
 
 /// Words that carry no identity — packaging noise added by uploaders.
@@ -56,7 +58,6 @@ const NOISE_WORDS: &[&str] = &[
     "visualiser",
     "remaster",
     "remastered",
-    "live",
     "hd",
     "hq",
     "4k",
@@ -163,7 +164,7 @@ fn is_noise_segment(seg: &str, square: bool) -> bool {
         return false;
     }
     let all_noise = toks.iter().all(|t| NOISE_WORDS.contains(&t.as_str()) || t.chars().all(|c| c.is_ascii_digit()));
-    let any_strong = toks.iter().any(|t| matches!(t.as_str(), "official" | "lyrics" | "lyric" | "video" | "audio" | "visualizer" | "remaster" | "remastered" | "live" | "hd" | "4k" | "mv"));
+    let any_strong = toks.iter().any(|t| matches!(t.as_str(), "official" | "lyrics" | "lyric" | "video" | "audio" | "visualizer" | "remaster" | "remastered" | "hd" | "4k" | "mv"));
     // Square brackets are almost always label tags ("[NCS Release]", "[HZRX]").
     all_noise || any_strong || square
 }
@@ -412,6 +413,19 @@ fn same_track(a: &Norm, b: &Norm) -> bool {
 pub(crate) fn same_title(a: &TrackVersion, b: &TrackVersion) -> bool {
     let (na, nb) = (Norm::of(a), Norm::of(b));
     na.markers == nb.markers && na.variant == nb.variant && title_similarity(&na, &nb) >= 0.8
+}
+
+/// Same song as a music video: title, version and artist agree; the length
+/// may differ more (intros, outros). Only for songs with no audio upload.
+pub(crate) fn same_song_as_video(a: &TrackVersion, b: &TrackVersion) -> bool {
+    let (na, nb) = (Norm::of(a), Norm::of(b));
+    if na.markers != nb.markers || na.variant != nb.variant || title_similarity(&na, &nb) < 0.8 || !artists_match(&na, &nb) {
+        return false;
+    }
+    match (a.duration, b.duration) {
+        (Some(da), Some(db)) => (db - da) >= -8.0 && (db - da) <= 60.0,
+        _ => true,
+    }
 }
 
 /// Same recording: title, version, artist and length all agree.
@@ -853,14 +867,24 @@ pub async fn search(query: String, source: String, limit: usize, pref: Vec<Platf
         tasks.push((
             p,
             tauri::async_runtime::spawn(async move {
-                if p == Platform::Spotify && all {
+                // A source that keeps failing gets only a moment (it may be back).
+                if all && crate::health::is_down(p) {
+                    let r = tokio::time::timeout(std::time::Duration::from_millis(1500), search_platform(p, q, limit, &cache))
+                        .await
+                        .unwrap_or_else(|_| Err(AppError::Timeout(format!("{} isn't answering right now", p.label()))));
+                    crate::health::record(p, &r);
+                    return r;
+                }
+                let r = if p == Platform::Spotify && all {
                     // Never let a slow (rate-limited) Spotify lookup hold up the other sources.
                     tokio::time::timeout(std::time::Duration::from_secs(15), search_platform(p, q, limit, &cache))
                         .await
                         .unwrap_or_else(|_| Err(AppError::Timeout("Spotify (spotDL) is slow right now — add your own Spotify app credentials in Settings".into())))
                 } else {
                     search_platform(p, q, limit, &cache).await
-                }
+                };
+                crate::health::record(p, &r);
+                r
             }),
         ));
     }
@@ -992,6 +1016,40 @@ mod tests {
             matched_for: None,
             isrc_match: false,
         }
+    }
+
+    #[test]
+    fn live_recordings_are_their_own_version() {
+        let studio = v(Platform::Spotify, "Mr. Brightside", "The Killers", Some(222.0), 0);
+        let live = v(Platform::Ytmusic, "Mr. Brightside (Live at Wembley Stadium)", "The Killers", Some(225.0), 0);
+        let live_dash = v(Platform::Ytmusic, "Mr. Brightside - Live", "The Killers", Some(224.0), 0);
+        let studio_yt = v(Platform::Ytmusic, "Mr. Brightside", "The Killers", Some(223.0), 0);
+        assert!(!same_recording(&studio, &live));
+        assert!(!same_recording(&studio, &live_dash));
+        assert!(!same_title(&studio, &live));
+        assert!(same_recording(&studio, &studio_yt));
+        assert!(same_recording(&live, &v(Platform::Spotify, "Mr. Brightside - Live at Wembley Stadium", "The Killers", Some(225.0), 0)));
+        // "Live" in the song's own name is just its name.
+        let a = v(Platform::Spotify, "Live Forever - Remastered", "Oasis", Some(276.0), 0);
+        let b = v(Platform::Ytmusic, "Live Forever", "Oasis", Some(277.0), 0);
+        assert!(same_recording(&a, &b));
+        assert!(!same_recording(&b, &v(Platform::Ytmusic, "Live Forever (Live at Knebworth)", "Oasis", Some(281.0), 0)));
+    }
+
+    #[test]
+    fn versions_that_must_not_match() {
+        let base = v(Platform::Spotify, "Blinding Lights", "The Weeknd", Some(200.0), 0);
+        for other in ["Blinding Lights (Remix)", "Blinding Lights - Instrumental", "Blinding Lights (Acoustic)", "Blinding Lights (Sped Up)", "Blinding Lights (Slowed + Reverb)", "Blinding Lights - Radio Edit", "Blinding Lights (Cover)", "Blinding Lights (Extended Mix)"] {
+            assert!(!same_recording(&base, &v(Platform::Ytmusic, other, "The Weeknd", Some(200.0), 0)), "{other}");
+        }
+        // Packaging only: same recording.
+        for same in ["Blinding Lights (Official Audio)", "Blinding Lights - Remastered 2020", "Blinding Lights [Explicit]", "Blinding Lights (feat. Nobody)"] {
+            assert!(same_recording(&base, &v(Platform::Ytmusic, same, "The Weeknd", Some(201.0), 0)), "{same}");
+        }
+        // Same name, different song length: different recording.
+        assert!(!same_recording(&base, &v(Platform::Ytmusic, "Blinding Lights", "The Weeknd", Some(260.0), 0)));
+        // Featured artists in the artist field still match.
+        assert!(same_recording(&v(Platform::Spotify, "Stay", "The Kid LAROI, Justin Bieber", Some(141.0), 0), &v(Platform::Ytmusic, "Stay", "The Kid LAROI & Justin Bieber", Some(142.0), 0)));
     }
 
     #[test]

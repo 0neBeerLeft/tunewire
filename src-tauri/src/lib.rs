@@ -35,6 +35,7 @@ mod error;
 mod explore;
 mod foryou;
 mod gallery;
+mod health;
 mod http;
 mod imports;
 mod localfiles;
@@ -266,6 +267,7 @@ pub fn run() {
             // Tokens/ids the first search would otherwise wait for.
             tauri::async_runtime::spawn_blocking(|| {
                 soundcloud::warm();
+                ytm::warm();
                 spotify::warm();
             });
             // Open the connections a Spotify song's first match uses.

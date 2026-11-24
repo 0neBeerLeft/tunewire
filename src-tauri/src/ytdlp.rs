@@ -245,13 +245,44 @@ pub const AUDIO_FORMAT: &str =
 
 type StreamCell = Arc<tokio::sync::OnceCell<AppResult<StreamInfo>>>;
 static STREAMS: std::sync::Mutex<Option<HashMap<String, (std::time::Instant, StreamCell)>>> = std::sync::Mutex::new(None);
-/// Stream URLs stay valid for hours; re-resolve well before that.
+/// How long a resolved stream is reused when its URL doesn't say when it
+/// expires (SoundCloud, others).
 const STREAM_TTL: Duration = Duration::from_secs(15 * 60);
+/// Never longer than this, even when the URL allows more (YouTube: ~6 h).
+const STREAM_TTL_MAX: Duration = Duration::from_secs(2 * 3600);
+/// Stop reusing a URL this long before it expires.
+const EXPIRY_MARGIN: u64 = 10 * 60;
+
+/// Whether a cached stream is still good to use: within its URL's own
+/// `expire=` time (minus a margin) when it has one, else STREAM_TTL.
+fn stream_fresh(created: std::time::Instant, cell: &StreamCell) -> bool {
+    match cell.get() {
+        Some(Err(_)) => false,
+        Some(Ok(info)) => {
+            let expire = url_expiry(&info.url);
+            let ttl = match expire {
+                Some(at) => {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    return at.saturating_sub(EXPIRY_MARGIN) > now && created.elapsed() < STREAM_TTL_MAX;
+                }
+                None => STREAM_TTL,
+            };
+            created.elapsed() < ttl
+        }
+        None => created.elapsed() < STREAM_TTL, // in flight
+    }
+}
+
+/// Unix time from a signed URL's `expire=` parameter (YouTube's googlevideo).
+fn url_expiry(url: &str) -> Option<u64> {
+    let q = url.split_once('?')?.1;
+    q.split('&').find_map(|kv| kv.strip_prefix("expire=")).and_then(|v| v.parse().ok())
+}
 
 fn stream_cell(url: &str) -> StreamCell {
     let mut guard = STREAMS.locked();
     let map = guard.get_or_insert_with(HashMap::new);
-    map.retain(|_, (t, c)| t.elapsed() < STREAM_TTL && !matches!(c.get(), Some(Err(_))));
+    map.retain(|_, (t, c)| stream_fresh(*t, c));
     if map.len() > 200 {
         map.clear();
     }
@@ -279,7 +310,7 @@ const MAX_PREFETCH: usize = 2;
 /// work). Returns false when it was dropped, so the page can ask again later.
 pub fn prefetch_stream(url: String) -> bool {
     static PREFETCH: OnceLock<Arc<Semaphore>> = OnceLock::new();
-    let fresh = STREAMS.locked().as_ref().and_then(|m| m.get(&url).map(|(t, c)| t.elapsed() < STREAM_TTL && !matches!(c.get(), Some(Err(_))))).unwrap_or(false);
+    let fresh = STREAMS.locked().as_ref().and_then(|m| m.get(&url).map(|(t, c)| stream_fresh(*t, c))).unwrap_or(false);
     if fresh {
         return true; // already resolved or in flight
     }

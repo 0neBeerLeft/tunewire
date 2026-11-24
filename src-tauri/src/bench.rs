@@ -275,3 +275,116 @@ fn bench_search_all_parts() {
         println!("{q:<28} total {} | {}", ms(t0.elapsed()), line.join(" | "));
     }
 }
+
+/// Click-to-sound for Spotify songs, step by step (the path a song takes the
+/// first time it's played without Spotify Premium):
+///   ISRC → YouTube Music by ISRC → (by title) → stream link → first audio.
+/// Then the same songs again (already matched, link cached) and with only the
+/// link cached away (a matched song after a restart).
+///   cargo test --release --lib bench_spotify_click -- --ignored --nocapture
+#[test]
+#[ignore]
+fn bench_spotify_click() {
+    let rt = rt();
+    let _g = rt.enter();
+    rt.block_on(crate::ytdlp_worker::warm(crate::ytdlp::binary()));
+    let queries = [
+        "blinding lights the weeknd", "bohemian rhapsody queen", "one more time daft punk", "levitating dua lipa", "smells like teen spirit nirvana",
+        "bad guy billie eilish", "as it was harry styles", "get lucky daft punk", "rolling in the deep adele", "mr brightside the killers",
+        "lose yourself eminem", "shape of you ed sheeran", "seven nation army white stripes", "hotline bling drake", "dancing queen abba",
+        "redbone childish gambino", "take on me a-ha", "espresso sabrina carpenter", "uptown funk bruno mars", "sweater weather the neighbourhood",
+    ];
+    let t0 = Instant::now();
+    let warm = rt.block_on(crate::spotify::search("warm up", 1));
+    println!("spotify token + search setup (once)      {}  ok={}", ms(t0.elapsed()), warm.is_ok());
+    let mut rows: Vec<[Duration; 5]> = Vec::new();
+    let mut found = Vec::new();
+    for q in queries {
+        let Some(sp) = rt.block_on(crate::spotify::search(q, 1)).ok().and_then(|v| v.into_iter().next()) else {
+            println!("{q:<32} spotify search failed");
+            continue;
+        };
+        let t = Instant::now();
+        let isrc = rt.block_on(crate::spotify::isrc(&sp.id)).ok().flatten();
+        let d_isrc = t.elapsed();
+        let t = Instant::now();
+        let mut m = isrc.as_ref().and_then(|i| rt.block_on(crate::ytm::search_songs(i)).ok()).and_then(|v| v.into_iter().next()).filter(|v| crate::search::same_title(&sp, v));
+        let d_by_isrc = t.elapsed();
+        let t = Instant::now();
+        if m.is_none() {
+            let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
+            m = rt.block_on(crate::ytm::search_songs(&query)).ok().and_then(|v| v.into_iter().take(6).find(|v| crate::search::same_recording(&sp, v)));
+        }
+        let d_by_title = t.elapsed();
+        let Some(v) = m else {
+            println!("{q:<32} no match (isrc {})", isrc.is_some());
+            continue;
+        };
+        let t = Instant::now();
+        let info = rt.block_on(crate::ytdlp::stream_info(&v.url));
+        let d_link = t.elapsed();
+        let t = Instant::now();
+        let opened = info.as_ref().ok().map(crate::stream::open);
+        let d_audio = t.elapsed();
+        let ok = matches!(opened, Some(Ok(_)));
+        println!("{q:<32} isrc {} by-isrc {} by-title {} link {} audio {}  {}{}", ms(d_isrc), ms(d_by_isrc), ms(d_by_title), ms(d_link), ms(d_audio), if ok { "ok" } else { "FAIL" }, if isrc.is_some() { "" } else { " (no isrc)" });
+        rows.push([d_isrc, d_by_isrc, d_by_title, d_link, d_audio]);
+        found.push(v);
+    }
+    let med = |i: usize| {
+        let mut v: Vec<u128> = rows.iter().map(|r| r[i].as_millis()).collect();
+        v.sort_unstable();
+        v.get(v.len() / 2).copied().unwrap_or(0)
+    };
+    let total: Vec<u128> = {
+        let mut t: Vec<u128> = rows.iter().map(|r| r.iter().map(Duration::as_millis).sum()).collect();
+        t.sort_unstable();
+        t
+    };
+    println!("\nFIRST PLAY  median: isrc {} | by-isrc {} | by-title {} | link {} | audio {} || total median {} ms, p90 {} ms ({} songs)",
+        med(0), med(1), med(2), med(3), med(4), total.get(total.len() / 2).unwrap_or(&0), total.get(total.len() * 9 / 10).unwrap_or(&0), rows.len());
+    // Already matched, link cached (same session): just opening the audio.
+    let mut again = Vec::new();
+    for v in &found {
+        let t = Instant::now();
+        if let Ok(info) = rt.block_on(crate::ytdlp::stream_info(&v.url)) {
+            let _ = crate::stream::open(&info);
+        }
+        again.push(t.elapsed().as_millis());
+    }
+    again.sort_unstable();
+    println!("REPLAY      median {} ms (match + link cached)", again.get(again.len() / 2).unwrap_or(&0));
+    // Matched, link not cached (after a restart).
+    let mut restart = Vec::new();
+    for v in &found {
+        crate::ytdlp::forget_stream(&v.url);
+        let t = Instant::now();
+        if let Ok(info) = rt.block_on(crate::ytdlp::stream_info(&v.url)) {
+            let _ = crate::stream::open(&info);
+        }
+        restart.push(t.elapsed().as_millis());
+    }
+    restart.sort_unstable();
+    println!("MATCHED     median {} ms (match saved, new link)", restart.get(restart.len() / 2).unwrap_or(&0));
+}
+
+/// Why some Spotify songs find no match: what YouTube Music returns for them.
+#[test]
+#[ignore]
+fn debug_unmatched() {
+    let rt = rt();
+    for q in ["hotline bling drake", "uptown funk bruno mars", "sweater weather the neighbourhood", "take on me a-ha"] {
+        let sp = rt.block_on(crate::spotify::search(q, 1)).unwrap().remove(0);
+        let isrc = rt.block_on(crate::spotify::isrc(&sp.id)).ok().flatten();
+        println!("\nSPOTIFY {:?} by {:?} ({:?}s) isrc {:?}", sp.title, sp.artist, sp.duration, isrc);
+        if let Some(i) = &isrc {
+            for v in rt.block_on(crate::ytm::search_songs(i)).unwrap_or_default().into_iter().take(2) {
+                println!("  by-isrc: {:?} by {:?} ({:?}s) same_title={}", v.title, v.artist, v.duration, crate::search::same_title(&sp, &v));
+            }
+        }
+        let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
+        for v in rt.block_on(crate::ytm::search_songs(&query)).unwrap_or_default().into_iter().take(4) {
+            println!("  by-title: {:?} by {:?} ({:?}s) same_recording={}", v.title, v.artist, v.duration, crate::search::same_recording(&sp, &v));
+        }
+    }
+}

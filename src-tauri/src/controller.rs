@@ -88,6 +88,8 @@ fn candidates(st: &AppState, item: &QueueItem) -> Vec<TrackVersion> {
     if item.platform != Some(Platform::Spotify) && c.iter().any(|v| v.matched_for == Some(Platform::Spotify)) {
         c.sort_by_key(|v| v.platform == Platform::Spotify);
     }
+    // Sources that keep failing right now go last (still tried if nothing else works).
+    c.sort_by_key(|v| crate::health::looks_down(v.platform));
     if let Some(p) = item.platform {
         if let Some(pos) = c.iter().position(|v| v.platform == p) {
             let v = c.remove(pos);
@@ -128,6 +130,48 @@ pub fn prefetch(app: &AppHandle, track: crate::models::Track, platform: Option<P
             true
         }
     }
+}
+
+/// Songs whose links are fetched ahead when a song starts (so skipping
+/// doesn't wait), one after another to stay gentle.
+const UPCOMING: usize = 3;
+
+/// Once per song that starts: get the stream links for the next few songs in
+/// the queue (matching Spotify songs first). Only links, no audio: cheap, and
+/// they're reused until they expire.
+fn prefetch_upcoming(app: &AppHandle) {
+    static LAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+    let st = app.state::<AppState>();
+    let items: Vec<QueueItem> = {
+        let q = st.queue.locked();
+        let Some(cur) = q.current else { return };
+        let uid = q.items.get(cur).map(|i| i.uid).unwrap_or(u64::MAX);
+        if LAST.swap(uid, Ordering::SeqCst) == uid {
+            return;
+        }
+        q.items.iter().skip(cur + 1).take(UPCOMING).cloned().collect()
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let st = app.state::<AppState>();
+        let logged_in = crate::spotify_play::has_login();
+        for mut item in items {
+            crate::matcher::apply(&mut item.track);
+            let first = candidates(&st, &item).into_iter().find(|v| v.platform != Platform::Spotify || logged_in);
+            let url = match first {
+                Some(v) if matches!(v.platform, Platform::Local | Platform::Spotify) || std::path::Path::new(&v.url).exists() => continue,
+                Some(v) => v.url,
+                None => {
+                    let Some(sp) = item.track.versions.iter().find(|v| v.platform == Platform::Spotify).cloned() else { continue };
+                    match crate::matcher::match_spotify(&sp).await {
+                        Some(v) => v.url,
+                        None => continue,
+                    }
+                }
+            };
+            let _ = ytdlp::stream_info(&url).await;
+        }
+    });
 }
 
 /// Replace a placeholder track's metadata (queue entry + the item we report).
@@ -231,7 +275,11 @@ async fn load_item(app: &AppHandle, item: &mut QueueItem, token: u64, cancelled:
             continue;
         }
         say(format!("Loading from {}…", v.platform.label()));
-        match load_version(&st, &v, token).await {
+        let r = load_version(&st, &v, token).await;
+        if !matches!(v.platform, Platform::Local) && !cancelled() {
+            crate::health::record(v.platform, &r);
+        }
+        match r {
             Ok((loaded, v)) => {
                 complete_metadata(app, item, &v);
                 return Ok((loaded, v));
@@ -631,6 +679,9 @@ pub fn on_engine_event(app: &AppHandle, ev: EngineEvent) {
         EngineEvent::Tick => {
             crate::state::emit_tick(app);
             maybe_preload(app);
+            if st.audio.status().state == EngineState::Playing {
+                prefetch_upcoming(app);
+            }
         }
         EngineEvent::Advanced { token } => {
             let pre = st.preload.locked().take();

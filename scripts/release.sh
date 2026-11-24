@@ -2,7 +2,7 @@
 # Publish a new version: ./scripts/release.sh 1.0.5
 # Bumps the version, checks the changelog has a section for it, runs the
 # tests, commits, tags and pushes. GitHub Actions builds, signs and publishes
-# (Windows + Linux, ~6-8 min); installed apps pick it up within the hour.
+# (Windows, ~10 min); installed apps pick it up within the hour.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 v="${1:?usage: scripts/release.sh <version>}"

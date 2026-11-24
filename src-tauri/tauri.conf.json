@@ -44,12 +44,18 @@
     ],
     "category": "Music",
     "shortDescription": "Native multi-source music player",
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY0MkFBNDRERENFMjU1QTYKUldTbVZlTGNUYVFxWkJZMzU3N05ieVFZMm9zbjBUUGZtUkorMjBhU3RQSW8wTGZDZ3lQcTFpNUUK",
       "endpoints": [
+        "https://dl.yuhron.site/tunewire/latest.json",
         "https://github.com/0neBeerLeft/tunewire/releases/latest/download/latest.json"
       ],
       "windows": {

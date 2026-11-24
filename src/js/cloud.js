@@ -332,7 +332,7 @@ function fromCloudTrack(t) {
 // Share links --------------------------------------------------------------------
 // With a link-preview server (TUNEWIRE_SHARE_URL) links show the playlist or
 // song in chat apps; otherwise they go to the GitHub Pages landing page.
-const LANDING_BASE = 'https://0nebeerleft.github.io/tunewire/';
+const LANDING_BASE = 'https://yuhron.site/tunewire/';
 function shareLink(kind, code) {
   const base = cloud.cfg?.share_url;
   return base ? `${base}/${kind}/${code}` : `${LANDING_BASE}#${kind}=${code}`;

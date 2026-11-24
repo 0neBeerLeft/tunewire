@@ -33,7 +33,7 @@ src-tauri/src/
   itests.rs      offline integration tests (fake yt-dlp + local HTTP server)
 supabase/        database migrations, row level security tests, Edge Functions (report, share)
 gallery/         themes and plugins offered in the in-app gallery (index.json is generated)
-docs/            the website (GitHub Pages): landing page and share-link pages
+docs/            redirect from the old GitHub Pages address to yuhron.site/tunewire
 ```
 
 ## Requirements
@@ -97,10 +97,10 @@ Outside the app there's no Rust backend, so `dev/mock.js` stands in with sample 
 Tunewire updates itself with `tauri-plugin-updater`. Releases live on GitHub, and every update is verified against the public key built into the app before it's installed. Settings → Tools → Updates has "Check now" and the startup check toggle.
 
 - **Signing key:** `~/.tauri/tunewire.key`, with its password in `~/.tauri/tunewire.key.password`. Never commit these; `.gitignore` excludes them. If the key is lost, existing installs can no longer verify updates, so back it up.
-- **CI:** `.github/workflows/release.yml` builds Linux (AppImage, .deb, .rpm), Windows (NSIS) and macOS (universal .dmg/.app) on every `v*` tag, signs them, and publishes a release with `latest.json`.
+- **CI:** `.github/workflows/release.yml` builds the Windows installer (NSIS) on every `v*` tag, signs it, and publishes a release with `latest.json`. The download server (dl.yuhron.site) copies each release from GitHub; the app checks there first and falls back to GitHub.
 - **Repository secrets:** `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 - **Cutting a release:** `scripts/release.sh 0.2.0` bumps the version, commits, tags and pushes; GitHub Actions does the rest.
-- **What updates:** auto-update works for the AppImage, the Windows installer and the macOS app. `.deb`/`.rpm` installs update through the package manager.
+- **What updates:** the Windows installer updates itself. Official builds are Windows-only from 2.3.1 (Linux and macOS still build from source).
 
 ## How it works
 

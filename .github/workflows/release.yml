@@ -1,5 +1,6 @@
 # Builds, signs and publishes a release whenever a tag like v0.2.0 is pushed.
-# The release includes latest.json, which the in-app updater reads.
+# The release includes latest.json, which the in-app updater reads; the
+# download server (dl.yuhron.site) copies each release from here by itself.
 #
 # Required repository secrets:
 #   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/tunewire.key
@@ -20,13 +21,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
-            args: "--bundles appimage,deb,rpm"
+          # Windows only (Mac and Linux builds were dropped in 2.3.1).
           - platform: windows-latest
             args: "--bundles nsis"
-          # One universal app for Apple Silicon and Intel Macs.
-          - platform: macos-latest
-            args: "--target universal-apple-darwin --bundles app,dmg"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +54,6 @@ jobs:
       - run: npm install
 
       - name: Offline tests
-        if: matrix.platform == 'ubuntu-22.04'
         working-directory: src-tauri
         run: cargo test
 
@@ -70,9 +66,7 @@ jobs:
             echo 'body<<EOF_NOTES'
             echo "${notes:-See the commits for this release.}"
             echo
-            echo '**Windows:** download the -setup.exe installer (it updates itself).'
-            echo '**Linux:** the .AppImage updates itself; .deb and .rpm are also available.'
-            echo '**macOS:** download the .dmg (Apple Silicon and Intel). The app is not signed by Apple yet, so the first time, right-click Tunewire in Applications and choose Open.'
+            echo '**Windows:** download the -setup.exe installer (it updates itself). Also at https://yuhron.site/tunewire/'
             echo 'Tunewire needs yt-dlp; if it is missing, the app offers to install its own copy.'
             echo 'EOF_NOTES'
           } >> "$GITHUB_OUTPUT"
@@ -86,13 +80,14 @@ jobs:
           # webhook is a function secret (supabase secrets set DISCORD_WEBHOOK=…)
           # and is never built into the app.
           # Optional: link-preview server for share links (supabase/functions/share).
-          TUNEWIRE_SHARE_URL: ${{ secrets.TUNEWIRE_SHARE_URL }}
+          TUNEWIRE_SHARE_URL: https://api.yuhron.site/functions/v1/share
           # Optional: Last.fm API account for scrobbling (users can also add their own).
           TUNEWIRE_LASTFM_KEY: ${{ secrets.TUNEWIRE_LASTFM_KEY }}
           TUNEWIRE_LASTFM_SECRET: ${{ secrets.TUNEWIRE_LASTFM_SECRET }}
-          # Online features (project URL + public anon key; RLS protects the data).
-          TUNEWIRE_SUPABASE_URL: ${{ secrets.TUNEWIRE_SUPABASE_URL }}
-          TUNEWIRE_SUPABASE_ANON_KEY: ${{ secrets.TUNEWIRE_SUPABASE_ANON_KEY }}
+          # Online features: the self-hosted backend's address and public anon key
+          # (the same key ships in every app; row level security protects the data).
+          TUNEWIRE_SUPABASE_URL: https://api.yuhron.site
+          TUNEWIRE_SUPABASE_ANON_KEY: eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlIiwgImlhdCI6IDE3OTU1MDU2MDYsICJleHAiOiAyMTEwODY1NjA2fQ.zgWVMKkl_IlxemzFY0pu9W-tb8y8aClMjxQo59qQ7wg
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}

@@ -14,7 +14,7 @@
 // code). Set SHARE_PUBLIC_URL to the address it's served at, and build the
 // app with TUNEWIRE_SHARE_URL set to the same.
 
-const LANDING = "https://0nebeerleft.github.io/tunewire/";
+const LANDING = "https://yuhron.site/tunewire/";
 const DEFAULT_IMAGE = `${LANDING}og.png`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CODE = /^[A-Za-z0-9_-]{1,4000}$/;

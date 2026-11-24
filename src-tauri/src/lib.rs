@@ -75,6 +75,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::{Arc, Mutex};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+#[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WindowEvent};
 
@@ -91,6 +92,7 @@ use state::{AppState, NowPlaying, Phase, QueueState};
 use store::Store;
 use themes::ThemeStore;
 
+#[cfg(desktop)]
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let toggle = MenuItem::with_id(app, "toggle", "Play / Pause", true, None::<&str>)?;
     let next = MenuItem::with_id(app, "next", "Next", true, None::<&str>)?;
@@ -138,7 +140,9 @@ pub(crate) fn show_main(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     report::install_panic_hook();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         // One app window: opening a tunewire:// link (or the app again) goes
         // to the running instance.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -147,19 +151,21 @@ pub fn run() {
                 let _ = tauri::Emitter::emit(app, "deep-link", url.clone());
             }
         }))
-        .plugin(tauri_plugin_deep_link::init())
         // Never restore the window frame from saved state: a state file from a
         // build with the native frame brought back Windows' own title bar on
         // top of ours (a double title bar).
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::DECORATIONS).build())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data = app.path().app_data_dir()?;
             let cache = app.path().app_cache_dir().unwrap_or_else(|_| data.join("cache"));
             stream::set_cache_dir(cache.join("streams"));
             let store = Store::open(data.clone())?;
+            secrets::set_dir(&data);
             localfiles::init(&data);
             spotify_play::init(data.clone());
 
@@ -296,11 +302,13 @@ pub fn run() {
                 });
             }
             // The app draws its own title bar; make sure Windows doesn't add one.
+            #[cfg(desktop)]
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_decorations(false);
             }
             media::init(app);
             media::update(app.handle(), &app.state::<AppState>().playback_state());
+            #[cfg(desktop)]
             if let Err(e) = setup_tray(app) {
                 // Some Linux desktops have no tray; that's fine.
                 eprintln!("tunewire: tray unavailable: {e}");
@@ -308,6 +316,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(desktop)]
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 let to_tray = app.try_state::<AppState>().map(|s| s.store.settings().close_to_tray).unwrap_or(false);

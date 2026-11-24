@@ -1,0 +1,99 @@
+# Builds the Android app (APK). Runs by hand (Actions → Android → Run
+# workflow) or on pushes to the `android` branch; the APK is attached to the
+# run as an artifact. Releases attach it too (see release.yml).
+name: Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android]
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.2.12479018
+      TUNEWIRE_SUPABASE_URL: https://api.yuhron.site
+      TUNEWIRE_SUPABASE_ANON_KEY: eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlIiwgImlhdCI6IDE3OTU1MDU2MDYsICJleHAiOiAyMTEwODY1NjA2fQ.zgWVMKkl_IlxemzFY0pu9W-tb8y8aClMjxQo59qQ7wg
+      TUNEWIRE_SHARE_URL: https://api.yuhron.site/functions/v1/share
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Android SDK and NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: android
+
+      - run: npm install
+
+      - name: Generate the Android project
+        run: npx tauri android init --ci
+
+      - name: Build the APK
+        run: npx tauri android build --apk --target aarch64 --ci
+
+      - name: Sign the APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          apk=$(find src-tauri/gen/android -name '*-release-unsigned.apk' | head -1)
+          [ -n "$apk" ] || { echo "no APK built"; exit 1; }
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > ks.p12; pass="$KEYSTORE_PASSWORD"
+          else
+            # No release key configured: a throwaway key (fine for testing,
+            # but such an APK can't be updated by a properly signed one).
+            echo "::warning::ANDROID_KEYSTORE not set; signing with a throwaway test key"
+            pass=testtest
+            keytool -genkeypair -keystore ks.p12 -storetype PKCS12 -storepass "$pass" -keypass "$pass" -alias tunewire \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Tunewire test"
+          fi
+          bt="$ANDROID_HOME/build-tools/35.0.0"
+          "$bt/zipalign" -f -p 4 "$apk" aligned.apk
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          "$bt/apksigner" sign --ks ks.p12 --ks-pass "pass:$pass" --out "Tunewire_${version}_android-arm64.apk" aligned.apk
+          "$bt/apksigner" verify --print-certs "Tunewire_${version}_android-arm64.apk" | head -3
+          rm -f ks.p12 aligned.apk
+          ls -la Tunewire_*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tunewire-android
+          path: Tunewire_*.apk
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ inputs.release_tag }}" Tunewire_*.apk --clobber

@@ -37,7 +37,7 @@ jobs:
         run: |
           sm=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
           yes | "$sm" --licenses >/dev/null || true
-          "$sm" --install "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          "$sm" --install "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;35.0.0" >/dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           # bindgen (QuickJS bindings for rustypipe) needs the NDK's headers.
           echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--sysroot=$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/sysroot" >> "$GITHUB_ENV"

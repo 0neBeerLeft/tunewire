@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "app.tunewire.media"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26

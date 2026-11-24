@@ -11,6 +11,17 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
   if (!isMobile) return;
   document.body.classList.add('mobile');
   const app = $('#app');
+  // Android draws the app under the status bar and the navigation bar:
+  // leave room for them (the WebView doesn't report them to CSS).
+  if (/Android/i.test(navigator.userAgent)) {
+    const pad = () => call('system_insets').then(({ top, bottom }) => {
+      const st = document.body.style;
+      if (top > 0) st.setProperty('--safe-t', `${Math.round(top)}px`);
+      if (bottom > 0) st.setProperty('--safe-b', `${Math.round(bottom)}px`);
+    }).catch(() => {});
+    pad();
+    window.addEventListener('resize', debounce(pad, 300));
+  }
   // Start on the page, not with the side panel covering it.
   app.classList.add('queue-hidden');
   app.classList.remove('lib-collapsed'); // the library is a full sheet here

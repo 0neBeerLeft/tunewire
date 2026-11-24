@@ -39,6 +39,12 @@ impl<R: Runtime> Media<R> {
         self.0.run_mobile_plugin::<serde_json::Value>("update", np).map(|_| ()).map_err(|e| e.to_string())
     }
 
+    /// The status bar (top) and navigation bar (bottom) heights in CSS pixels. Blocking.
+    pub fn insets(&self) -> Result<(f64, f64), String> {
+        let v: serde_json::Value = self.0.run_mobile_plugin("insets", ()).map_err(|e| e.to_string())?;
+        Ok((v["top"].as_f64().unwrap_or(0.0), v["bottom"].as_f64().unwrap_or(0.0)))
+    }
+
     /// Open a link in the browser (or the APK installer). Blocking.
     pub fn open_url(&self, url: &str) -> Result<(), String> {
         self.0.run_mobile_plugin::<serde_json::Value>("openUrl", Url { url }).map(|_| ()).map_err(|e| e.to_string())

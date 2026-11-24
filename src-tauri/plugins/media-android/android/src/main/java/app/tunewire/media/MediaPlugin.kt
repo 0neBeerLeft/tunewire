@@ -9,6 +9,8 @@ import android.os.Build
 import android.webkit.WebView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -63,6 +65,24 @@ class MediaPlugin(private val activity: Activity) : Plugin(activity) {
             MediaService.State(a.title, a.artist, a.album, a.artwork, a.status, a.positionMs, a.durationMs)
         )
         invoke.resolve()
+    }
+
+    /**
+     * How much of the screen the status bar (top) and the navigation bar or
+     * gesture handle (bottom) cover, in CSS pixels. Android draws apps under
+     * them (edge to edge), so the page leaves this much room.
+     */
+    @Command
+    fun insets(invoke: Invoke) {
+        activity.runOnUiThread {
+            val ret = JSObject()
+            val density = activity.resources.displayMetrics.density.takeIf { it > 0f } ?: 1f
+            val root = ViewCompat.getRootWindowInsets(activity.window.decorView)
+            val bars = root?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            ret.put("top", (bars?.top ?: 0) / density)
+            ret.put("bottom", (bars?.bottom ?: 0) / density)
+            invoke.resolve(ret)
+        }
     }
 
     @Command

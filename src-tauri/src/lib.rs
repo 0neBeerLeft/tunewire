@@ -362,6 +362,7 @@ pub fn run() {
             system::reports_available,
             system::ytdlp_install,
             extras::open_link,
+            extras::system_insets,
             discover::search_tracks,
             discover::load_playlist,
             discover::extract_stream_url,

@@ -15,6 +15,9 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 @InvokeArg
 class ExecuteArgs {
@@ -31,6 +34,11 @@ class YtdlpPlugin(private val activity: Activity) : Plugin(activity) {
     @Volatile private var initError: String? = null
     // Same cap as desktop (MAX_CONCURRENT in ytdlp.rs).
     private val pool = Executors.newFixedThreadPool(3)
+    // Updating replaces the yt-dlp file in place: a run that reads it
+    // halfway through fails ("zipimport.ZipImportError: bad local file
+    // header"). Runs share the lock; the update waits for them and holds
+    // new ones back for its few seconds.
+    private val fileLock = ReentrantReadWriteLock()
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -43,13 +51,20 @@ class YtdlpPlugin(private val activity: Activity) : Plugin(activity) {
                 Log.e(TAG, "init failed", e)
             }
             ready.countDown()
-            // YouTube changes often; keep yt-dlp current (quietly).
+            // YouTube changes often; keep yt-dlp current (quietly), at most
+            // once a day, after the app's first requests have gone through.
             if (initError == null) {
-                try {
-                    val status = YoutubeDL.getInstance().updateYoutubeDL(ctx, YoutubeDL.UpdateChannel.STABLE)
-                    Log.i(TAG, "yt-dlp update: $status (${YoutubeDL.getInstance().versionName(ctx)})")
-                } catch (e: Exception) {
-                    Log.w(TAG, "yt-dlp update failed: ${e.message}")
+                val prefs = ctx.getSharedPreferences("tunewire-ytdlp", android.content.Context.MODE_PRIVATE)
+                val last = prefs.getLong("last-update", 0L)
+                if (System.currentTimeMillis() - last > 20 * 60 * 60 * 1000L) {
+                    try { Thread.sleep(15_000) } catch (_: InterruptedException) {}
+                    try {
+                        val status = fileLock.write { YoutubeDL.getInstance().updateYoutubeDL(ctx, YoutubeDL.UpdateChannel.STABLE) }
+                        prefs.edit().putLong("last-update", System.currentTimeMillis()).apply()
+                        Log.i(TAG, "yt-dlp update: $status (${YoutubeDL.getInstance().versionName(ctx)})")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "yt-dlp update failed: ${e.message}")
+                    }
                 }
             }
         }.start()
@@ -70,7 +85,7 @@ class YtdlpPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 // No URL list: the arguments already hold the targets.
                 val request = YoutubeDLRequest(emptyList<String>()).addCommands(args)
-                val r = YoutubeDL.getInstance().execute(request, null, null)
+                val r = fileLock.read { YoutubeDL.getInstance().execute(request, null, null) }
                 ret.put("code", r.exitCode)
                 ret.put("stdout", r.out)
                 ret.put("stderr", r.err)

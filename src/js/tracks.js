@@ -234,6 +234,13 @@ document.addEventListener('click', (e) => {
     }
     return;
   }
+  // Phones: a tap plays the song (no double-click on touch); tapping the
+  // one that's on pauses or resumes it. Long-press opens the menu.
+  if (document.body.classList.contains('mobile')) {
+    if (row.classList.contains('playing') && ['playing', 'paused'].includes(state.playback?.status)) call('toggle_pause').catch((err) => toast(errMsg(err), 'error'));
+    else rowPlay(row);
+    return;
+  }
   selectRow(row, e);
 });
 document.addEventListener('dblclick', (e) => {

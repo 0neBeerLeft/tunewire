@@ -150,6 +150,14 @@ pub fn open_link(url: String) -> AppResult<()> {
     crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))
 }
 
+/// How much the phone's status bar (top) and navigation bar (bottom) cover
+/// the page, in CSS pixels ({top: 0, bottom: 0} on desktop).
+#[tauri::command]
+pub async fn system_insets() -> serde_json::Value {
+    let (top, bottom) = tauri::async_runtime::spawn_blocking(crate::media::insets).await.unwrap_or((0.0, 0.0));
+    serde_json::json!({ "top": top, "bottom": bottom })
+}
+
 /// Opens Last.fm's approval page and waits (up to 3 minutes) for the user.
 #[tauri::command]
 pub async fn lastfm_connect(st: State<'_, AppState>) -> AppResult<String> {

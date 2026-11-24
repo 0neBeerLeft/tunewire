@@ -95,6 +95,15 @@ mod imp {
         }
     }
 
+    /// Status bar / navigation bar heights (CSS px); (0, 0) when unknown.
+    pub fn insets() -> (f64, f64) {
+        #[cfg(target_os = "android")]
+        if let Some(h) = HANDLE.get() {
+            return h.insets().unwrap_or((0.0, 0.0));
+        }
+        (0.0, 0.0)
+    }
+
     /// Open a web link in the browser (Android: through the plugin).
     pub fn open_url(url: &str) -> Result<(), String> {
         #[cfg(target_os = "android")]
@@ -108,6 +117,12 @@ mod imp {
 }
 #[cfg(mobile)]
 pub use imp::*;
+
+/// Desktop windows have no system bars over the page.
+#[cfg(desktop)]
+pub fn insets() -> (f64, f64) {
+    (0.0, 0.0)
+}
 
 /// Open a web link in the default browser.
 #[cfg(desktop)]

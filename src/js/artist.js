@@ -19,8 +19,9 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
   const body = $('#artist-body');
   body.style.setProperty('--hero', '#3a3a3a');
   body.replaceChildren(
-    h('div', { class: 'artist-hero' }, h('div', {}, h('h1', {}, primary || 'Artist'), h('div', { class: 'sk w-20 on-hero' }))),
-    h('div', { class: 'action-bar' }, h('span', { class: 'big-play', html: icon('play') })),
+    h('div', { class: 'artist-hero ar-hero' }, h('div', { class: 'ar-hero-inner' },
+      h('div', { class: 'ar-avatar' }, thumbnail ? h('img', { src: thumbnail, 'data-px': 400, alt: '', referrerpolicy: 'no-referrer' }) : null),
+      h('div', { class: 'ar-copy' }, h('h1', {}, primary || 'Artist'), h('div', { class: 'sk w-20 on-hero' })))),
     loadingBox(`Loading ${primary || 'artist'}`, h('div', { class: 'section-title sk w-20' }), h('div', { class: 'track-list popular' }, ...skeletonRows(5)), h('div', { class: 'section-title sk w-20' }), skeletonCards(6)));
   let a;
   try {
@@ -28,21 +29,16 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
   } catch (e) {
     if (seq !== artistSeq) return;
     body.replaceChildren(h('div', { class: 'page-head' }, h('h1', {}, primary)),
-      h('div', { class: 'empty' }, h('p', {}, errMsg(e)), h('button', { class: 'btn', onclick: () => { $('#search-input').value = primary; syncSearchClear(); doSearch(primary); } }, `Search for “${primary}” instead`)));
+      h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e)), h('button', { class: 'btn', onclick: () => { $('#search-input').value = primary; syncSearchClear(); doSearch(primary); } }, `Search for “${primary}” instead`)));
     return;
   }
   if (seq !== artistSeq) return;
   state.artistName = a.name;
   renderLibrary();
   const art = a.banner || thumbnail || a.thumbnail;
-  const hero = h('div', { class: 'artist-hero' },
-    h('div', {},
-      h('div', { class: 'verified' }, h('span', { html: icon('verified'), class: 'verified-ico' }), 'Artist'),
-      h('h1', {}, a.name),
-      h('div', { class: 'audience' }, a.audience || (a.subscribers ? `${a.subscribers} subscribers` : ''))));
-  if (art) hero.style.backgroundImage = `url("${art.replace(/"/g, '%22')}")`;
-
+  const face = thumbnail || a.thumbnail || a.banner;
   let allSongs = null;
+  const isMine = () => playingOneOf(a.top_songs) || (allSongs ? playingOneOf(allSongs) : false);
   const playAll = async (shuffle = false) => {
     let list = a.top_songs;
     if (a.all_songs) {
@@ -51,8 +47,12 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
     if (shuffle) list = [...list].sort(() => Math.random() - 0.5);
     playCollection(list, 0, `artist:${a.browse_id}`);
   };
-  const follow = h('button', { class: 'ab-follow' });
-  const paintFollow = () => { follow.textContent = isFollowing(a.name) ? 'Following' : 'Follow'; };
+  const follow = h('button', { class: 'btn big ar-follow' });
+  const paintFollow = () => {
+    const on = isFollowing(a.name);
+    follow.classList.toggle('on', on);
+    follow.innerHTML = `${icon(on ? 'check' : 'plus')}${on ? 'Following' : 'Follow'}`;
+  };
   follow.addEventListener('click', async () => {
     try {
       const now = await call('follow_artist', { name: a.name, url: `https://www.youtube.com/channel/${a.browse_id}`, thumbnail: a.thumbnail || null });
@@ -63,20 +63,31 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
     } catch (e) { toast(errMsg(e), 'error'); }
   });
   paintFollow();
-  const bar = h('div', { class: 'action-bar' },
-    playButton(h('button', { class: 'big-play', title: `Play ${a.name}`, 'data-title': `Play ${a.name}` }),
-      () => playingOneOf(a.top_songs) || (allSongs ? playingOneOf(allSongs) : false), () => playAll()),
-    h('button', { class: 'ab-icon', title: 'Shuffle', html: icon('shuffle'), onclick: () => playAll(true) }),
-    follow,
-    h('button', { class: 'ab-icon', title: `Start ${a.name} radio`, html: icon('radio'), disabled: !a.top_songs.length, onclick: () => startRadio(a.top_songs[0]) }),
-    (() => {
-      const b = h('button', { class: 'ab-icon', title: 'More options', html: icon('dots') });
-      b.addEventListener('click', () => openMenu(b, [
-        { label: 'Add top songs to queue', icon: 'plus', onClick: () => enqueue(a.top_songs) },
-        { label: 'Copy link to artist', icon: 'link', onClick: () => copyText(`https://music.youtube.com/channel/${a.browse_id}`) },
-      ]));
-      return b;
-    })());
+  const more = h('button', { class: 'ar-round', title: 'More options', 'aria-label': 'More options', html: icon('dots') });
+  more.addEventListener('click', () => openMenu(more, [
+    { label: 'Add top songs to queue', icon: 'plus', onClick: () => enqueue(a.top_songs) },
+    a.top_songs.length ? { label: `Start ${a.name} radio`, icon: 'radio', onClick: () => startRadio(a.top_songs[0]) } : null,
+    { label: 'Copy link to artist', icon: 'link', onClick: () => copyText(`https://music.youtube.com/channel/${a.browse_id}`) },
+  ].filter(Boolean)));
+
+  // Hero: the banner behind glass, the artist's picture, name, numbers and
+  // the main actions, in the same card style as the home page.
+  const stats = [a.audience, a.subscribers ? `${a.subscribers} subscribers` : ''].filter(Boolean);
+  const hero = h('div', { class: 'artist-hero ar-hero' },
+    art ? h('img', { class: 'ar-backdrop', src: bannerUrl(art, 1600), 'data-px': 1600, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() }) : null,
+    h('div', { class: 'ar-hero-inner' },
+      h('div', { class: 'ar-avatar' }, face
+        ? h('img', { src: face, 'data-px': 400, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => { e.target.replaceWith(h('span', { html: icon('user') })); } })
+        : h('span', { html: icon('user') })),
+      h('div', { class: 'ar-copy' },
+        h('h1', { class: a.name.length > 18 ? 'long' : '' }, a.name),
+        h('div', { class: 'ar-stats' }, ...stats.map((s) => h('span', {}, s)),
+          h('span', { class: 'ar-verified', title: 'Verified artist' }, h('span', { class: 'verified-ico', html: icon('verified') }), 'Verified')),
+        h('div', { class: 'ar-actions' },
+          playButton(h('button', { class: 'btn primary big', 'data-title': `Play ${a.name}` }), isMine, () => playAll(), 'Play'),
+          h('button', { class: 'ar-round', title: 'Shuffle', 'aria-label': 'Shuffle', html: icon('shuffle'), onclick: () => playAll(true) }),
+          follow,
+          more))));
 
   // Popular: top 5, "See more" shows up to 10 from all their songs.
   const popular = h('div', { class: 'track-list popular' });
@@ -88,12 +99,28 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
     }
     if (seq !== artistSeq) return;
     const shown = expanded ? list.slice(0, 10) : list.slice(0, 5);
-    popular.replaceChildren(...shown.map((t, i) => trackRow(t, i, { onPlay: () => playCollection(list, i, `artist:${a.browse_id}`) })));
+    popular.replaceChildren(...shown.map((t, i) => trackRow(t, i, { onPlay: () => playCollection(list, i, `artist:${a.browse_id}`), noAlbum: true })));
     popular._ctx = {};
-    more.textContent = expanded ? 'Show less' : 'See more';
+    seeMore.textContent = expanded ? 'Show less' : 'See more';
     markPlaying();
   };
-  const more = h('button', { class: 'btn small show-more', onclick: () => { expanded = !expanded; renderPopular(); } }, 'See more');
+  const seeMore = h('button', { class: 'btn small show-more', onclick: () => { expanded = !expanded; renderPopular(); } }, 'See more');
+
+  // Latest release: the newest album or single, next to Popular.
+  const year = (c) => Number((c.subtitle.match(/\b(19|20)\d{2}\b/) || [0])[0]);
+  const latest = [...a.singles, ...a.albums].filter((c) => year(c)).sort((x, y) => year(y) - year(x))[0] || null;
+  const latestCard = latest ? (() => {
+    const cover = h('div', { class: 'ar-latest-art' }, latest.thumbnail ? h('img', { src: latest.thumbnail, 'data-px': 400, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { html: icon('disc') }),
+      h('button', { class: 'tile-play', title: `Play ${latest.title}`, html: icon('play'), onclick: (e) => { e.stopPropagation(); playCard(latest); } }));
+    const el = h('div', { class: 'ar-latest', role: 'button', tabindex: '0' },
+      h('div', { class: 'ar-label' }, 'Latest release'),
+      cover,
+      h('b', {}, latest.title),
+      h('span', { class: 'meta' }, latest.subtitle.replace(/ • /g, ' · ')));
+    el.addEventListener('click', () => openCard(latest));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') openCard(latest); });
+    return el;
+  })() : null;
 
   // Discography: Albums / Singles & EPs.
   const discBox = h('div');
@@ -107,22 +134,37 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
   };
   if (tabs.length) renderDisc();
 
-  const sections = [hero, bar,
-    a.top_songs.length ? h('div', {}, h('div', { class: 'section-title mt-8' }, 'Popular'), popular, a.top_songs.length > 5 || a.all_songs ? more : null) : null,
-    tabs.length ? h('div', {}, h('div', { class: 'section-title' }, 'Discography'), discBox) : null];
+  const section = (title, ...content) => h('section', { class: 'ar-section' }, h('div', { class: 'section-title' }, title), ...content);
+  const sections = [hero,
+    a.top_songs.length ? h('div', { class: `ar-top${latestCard ? '' : ' solo'}` },
+      h('section', { class: 'ar-popular' }, h('div', { class: 'section-title' }, 'Popular'), popular, a.top_songs.length > 5 || a.all_songs ? seeMore : null),
+      latestCard) : null,
+    tabs.length ? section('Discography', discBox) : null];
   for (const shelf of a.shelves) {
     if (!shelf.cards.length || /live performance/i.test(shelf.title)) continue;
-    sections.push(h('div', {}, h('div', { class: 'section-title' }, shelf.title), cardRow(shelf.cards, 7)));
+    const videos = shelf.cards.filter((c) => c.kind === 'video');
+    if (videos.length && videos.length >= shelf.cards.length / 2) {
+      const own = dropOutliers(videos.filter((c) => artistVideo(c, a.name)));
+      if (own.length) sections.push(section(shelf.title, videoRow(own, 8)));
+      continue;
+    }
+    sections.push(section(shelf.title, cardRow(shelf.cards, 7)));
   }
-  if (a.related.length) sections.push(h('div', {}, h('div', { class: 'section-title' }, 'Fans also like'), cardRow(a.related, 7)));
+  if (a.related.length) sections.push(section('Fans also like', h('div', { class: 'card-row ar-related' }, ...a.related.slice(0, 7).map((c, i) => cardTile(c, i)))));
   const scUrl = soundcloudLink(track);
-  const scBox = scUrl ? h('div') : null;
+  const scBox = scUrl ? h('div', { class: 'ar-section' }) : null;
   if (scBox) sections.push(scBox);
   if (a.description || a.audience) {
-    const about = h('div', { class: 'about-card' }, h('div', {}, h('div', { class: 'about-aud' }, a.audience || ''), a.description ? h('p', {}, a.description) : null));
-    if (art) about.style.backgroundImage = `url("${bannerUrl(art, 900).replace(/"/g, '%22')}")`;
-    about.addEventListener('click', () => openModal({ title: a.name, subtitle: a.audience, wide: true, body: h('p', { class: 'prewrap lh-16' }, a.description || '') }));
-    sections.push(h('div', {}, h('div', { class: 'section-title' }, 'About'), about));
+    const about = h('div', { class: 'ar-about', role: 'button', tabindex: '0' },
+      art ? h('div', { class: 'ar-about-art' }, h('img', { src: bannerUrl(art, 900), 'data-px': 900, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() })) : null,
+      h('div', { class: 'ar-about-text' },
+        stats.length ? h('div', { class: 'ar-about-stats' }, ...stats.map((s) => h('b', {}, s))) : null,
+        a.description ? h('p', {}, a.description) : null,
+        a.description ? h('span', { class: 'ar-about-more' }, 'Read more') : null));
+    const open = () => openModal({ title: a.name, subtitle: stats.join(' · '), wide: true, body: h('p', { class: 'prewrap lh-16' }, a.description || '') });
+    about.addEventListener('click', open);
+    about.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+    sections.push(section('About', about));
   }
   body.replaceChildren(...sections.filter(Boolean));
   renderPopular();
@@ -147,6 +189,59 @@ async function openArtist(name, track = null, { browseId = null, thumbnail = nul
       }
     }).catch(() => scBox.remove());
   }
+}
+
+/**
+ * A video on an artist page that's really theirs. YouTube Music's Videos
+ * shelf can mix in uploads by others (a different channel that shares the
+ * name, covers, reaction videos): keep a video only when the artist is its
+ * uploader (the subtitle's first part) or named in its title.
+ */
+function artistVideo(card, name) {
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const want = norm(name);
+  if (!want) return true;
+  const by = card.subtitle.split(' • ').filter((p) => !/\bviews?\b|^\d/.test(p)).map(norm);
+  const title = norm(card.title);
+  const trackArtist = norm(card.track?.artist);
+  return by.some((b) => b === want || b.split(' ').join('') === want.split(' ').join(''))
+    || trackArtist === want
+    || ` ${title} `.includes(` ${want} `);
+}
+
+/** "1.6K views" → 1600. */
+function viewCount(card) {
+  const m = card.subtitle.match(/([\d.,]+)\s*([KMB])?\s*views?/i);
+  if (!m) return null;
+  return parseFloat(m[1].replace(/,/g, '')) * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1);
+}
+
+/**
+ * Drops videos with a tiny audience next to the artist's others: YouTube
+ * sometimes files a stranger's upload (a local event that shares the name)
+ * under a big artist. 1% of the typical video's views is the cut-off.
+ */
+function dropOutliers(cards) {
+  const views = cards.map(viewCount).filter((v) => v != null).sort((x, y) => x - y);
+  if (views.length < 3) return cards;
+  const median = views[Math.floor(views.length / 2)];
+  return cards.filter((c) => { const v = viewCount(c); return v == null || v >= median / 100; });
+}
+
+/** A row of 16:9 video cards (artist pages). */
+function videoRow(cards, limit = 8) {
+  return h('div', { class: 'video-row' }, ...cards.slice(0, limit).map((c, i) => {
+    const thumb = h('div', { class: 'vr-thumb' },
+      c.thumbnail ? h('img', { src: c.thumbnail.replace('/mqdefault.jpg', '/hqdefault.jpg'), 'data-px': 480, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() }) : null,
+      h('span', { class: 'vr-play', html: icon('play') }));
+    const views = c.subtitle.split(' • ').find((p) => /views?/i.test(p));
+    const card = h('div', { class: 'vr-card', style: `--i:${i}`, role: 'button', tabindex: '0', title: c.title },
+      thumb, h('div', { class: 'vr-title' }, c.title), views ? h('div', { class: 'vr-sub' }, views) : null);
+    const play = () => playCard(c);
+    card.addEventListener('click', play);
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter') play(); });
+    return card;
+  }));
 }
 
 /** Grid of album cards (charts, releases); covers load lazily, a few at a time. */
@@ -212,7 +307,7 @@ async function openAlbum(target, title = 'Album', { push = true } = {}) {
     c = await call('ytm_collection', { id: browseId, url });
   } catch (e) {
     if (seq !== albumSeq) return;
-    body.replaceChildren(h('div', { class: 'page-head' }, h('h1', {}, title)), h('div', { class: 'empty' }, h('p', {}, errMsg(e))));
+    body.replaceChildren(h('div', { class: 'page-head' }, h('h1', {}, title)), h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e))));
     return;
   }
   if (seq !== albumSeq) return;

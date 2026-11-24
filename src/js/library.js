@@ -35,7 +35,7 @@ function coverArt(tracks, cls, custom) {
   if (custom) { box.append(h('img', { src: custom, alt: '' })); return box; }
   const big = cls.includes('hero-art') ? 500 : cls.includes('lib-art') ? 96 : 160;
   const thumbs = [...new Set(tracks.map((t) => t.thumbnail).filter(Boolean))].slice(0, 4);
-  if (!thumbs.length) { box.innerHTML = icon('music'); return box; }
+  if (!thumbs.length) { box.append(h('img', { src: genCover(tracks[0]?.key || cls), alt: '' })); return box; }
   if (thumbs.length >= 4) box.classList.add('grid4');
   for (const t of thumbs.length >= 4 ? thumbs : thumbs.slice(0, 1)) {
     box.append(h('img', { src: t, 'data-px': thumbs.length >= 4 ? Math.round(big / 2) : big, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => { e.target.style.visibility = 'hidden'; }, onload: (e) => { if (isYtPlaceholder(e.target)) e.target.style.visibility = 'hidden'; } }));
@@ -93,15 +93,15 @@ function renderLibrary() {
     items.push(libItem({
       art: h('div', { class: 'lib-art liked', html: icon('heartFill') }),
       name: 'Liked Songs',
-      sub: [h('span', { class: 'pin', html: icon('pin') }), `Playlist · ${state.favorites.length} songs`],
+      sub: [h('span', { class: 'pin', html: icon('pin') }), `Playlist · ${songCount(state.favorites.length)}`],
       active: state.view === 'favorites', onClick: () => showView('favorites'), dropPlaylist: 'liked', playing: playingFrom() === 'liked',
     }));
   }
   if ((!f || f === 'downloaded') && matches('Downloads') && (state.downloads.length || f === 'downloaded')) {
-    items.push(libItem({ art: h('div', { class: 'lib-art special', html: icon('download') }), name: 'Downloads', sub: `${state.downloads.length} songs`, active: state.view === 'downloads', onClick: () => showView('downloads') }));
+    items.push(libItem({ art: h('div', { class: 'lib-art special', html: icon('download') }), name: 'Downloads', sub: songCount(state.downloads.length), active: state.view === 'downloads', onClick: () => showView('downloads') }));
   }
   if (!f && matches('Local files') && state.localCount) {
-    items.push(libItem({ art: h('div', { class: 'lib-art special', html: icon('folder') }), name: 'Local files', sub: `${state.localCount} songs`, active: state.view === 'local', onClick: () => showView('local') }));
+    items.push(libItem({ art: h('div', { class: 'lib-art special', html: icon('folder') }), name: 'Local files', sub: songCount(state.localCount), active: state.view === 'local', onClick: () => showView('local') }));
   }
 
   if (!f || f === 'playlist' || f === 'downloaded') {
@@ -117,7 +117,7 @@ function renderLibrary() {
     const plItem = (pl) => libItem({
       art: keepArt(`lib:${pl.id}|${(pl.cover || '').length}|${pl.tracks.slice(0, 60).map((t) => t.thumbnail || '').join(',')}`, () => coverArt(pl.tracks, 'lib-art', pl.cover)),
       name: pl.name,
-      sub: [pl.pinned ? h('span', { class: 'pin', html: icon('pin') }) : null, `Playlist · ${pl.tracks.length} songs`].filter(Boolean),
+      sub: [pl.pinned ? h('span', { class: 'pin', html: icon('pin') }) : null, `Playlist · ${songCount(pl.tracks.length)}`].filter(Boolean),
       active: state.view === 'playlist' && state.selectedPlaylist === pl.id,
       playing: playingFrom() === pl.id,
       onClick: () => openPlaylist(pl.id),
@@ -381,12 +381,29 @@ function renderCollection(container, o) {
     if (o.smart?.on && o.smart.recs?.length) return playCollection(smartMix(tracks, o.smart.recs), 0, o.id);
     return playCollection(tracks, 0, o.id);
   };
-  const shuffleBtn = h('button', { class: `ab-icon${state.settings?.shuffle ? ' on' : ''}`, title: state.settings?.shuffle ? 'Turn off shuffle' : 'Shuffle', html: icon('shuffle'), onclick: async () => {
-    await call('set_shuffle', { on: !state.settings?.shuffle });
-    state.settings.shuffle = !state.settings.shuffle;
-    shuffleBtn.classList.toggle('on', state.settings.shuffle);
-    if (state.settings.shuffle && !isPlayingFrom(o.id)) playCollection(tracks, Math.floor(Math.random() * tracks.length), o.id);
+  const paintShuffle = () => {
+    const on = !!state.settings?.shuffle;
+    shuffleBtn.classList.toggle('on', on);
+    shuffleBtn.title = on ? 'Turn off shuffle' : 'Shuffle';
+    shuffleBtn.setAttribute('aria-pressed', String(on));
+  };
+  const shuffleBtn = h('button', { class: 'ab-icon', html: icon('shuffle'), onclick: async () => {
+    // Not playing this playlist yet: shuffle it and start at a random song.
+    // Already playing it: switch shuffle on or off for the songs coming up.
+    const playingHere = isPlayingFrom(o.id);
+    const on = playingHere ? !state.settings?.shuffle : true;
+    try {
+      // Decide first, then set: the player's own update can arrive before
+      // this call returns (flipping it again here turned shuffle back off).
+      if (on !== !!state.settings?.shuffle) await call('set_shuffle', { on });
+      state.settings.shuffle = on;
+      paintShuffle();
+      if (!playingHere) playCollection(tracks, Math.floor(Math.random() * tracks.length), o.id);
+      else toast(on ? 'Shuffle on: the next songs are mixed up' : 'Shuffle off: back to the playlist order', 'info', 1800);
+      renderPlayback();
+    } catch (e) { toast(errMsg(e), 'error'); }
   } });
+  paintShuffle();
   const findInput = h('input', { placeholder: 'Search in playlist', value: ps.query, spellcheck: 'false' });
   const find = h('div', { class: `ab-find${ps.query ? ' open' : ''}` }, h('button', { class: 'icon-btn', title: 'Search in playlist', html: icon('search'), onclick: () => { find.classList.add('open'); findInput.focus(); } }), findInput);
   findInput.addEventListener('input', () => { ps.query = findInput.value; renderRows(); });
@@ -705,7 +722,7 @@ function recommendSection(pl, remote) {
       return;
     }
     if (rs.error) {
-      box.replaceChildren(head, h('div', { class: 'empty' }, h('p', {}, rs.error)));
+      box.replaceChildren(head, h('div', { class: 'empty is-error' }, h('p', {}, rs.error)));
       return;
     }
     const visible = (rs.list || []).filter((r) => !rs.added.has(r.track.key));

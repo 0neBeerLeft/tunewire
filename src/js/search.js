@@ -96,7 +96,7 @@ async function doSearch(q, { push = true } = {}) {
     } catch (e) {
       if (seq !== searchSeq) return;
       $('#search-meta').textContent = 'Could not open link';
-      $('#search-results').replaceChildren(h('div', { class: 'empty' }, h('p', {}, errMsg(e))));
+      $('#search-results').replaceChildren(h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e))));
     }
     return;
   }
@@ -142,7 +142,7 @@ async function searchSongs(q, seq) {
     if (seq !== searchSeq) return;
     srch.songsDone = true;
     $('#search-meta').textContent = '';
-    results.replaceChildren(h('div', { class: 'empty' }, h('p', {}, errMsg(e))));
+    results.replaceChildren(h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e))));
     if (e.kind === 'yt_dlp_missing') offerYtdlpInstall(errMsg(e));
     if (srch.tab === 'all') renderSearchAll();
   }
@@ -222,7 +222,7 @@ function renderSearchAll() {
   if (x) {
     const shelf = (title, cards, tab) => (cards.length ? h('div', {}, h('div', { class: 'section-title' }, title, h('button', { class: 'btn small ml-auto', onclick: () => setSearchTab(tab) }, 'Show all')), cardRow(cards, 7)) : null);
     blocks.push(shelf('Artists', x.artists, 'artists'), shelf('Albums', x.albums, 'albums'), shelf('Playlists', x.playlists, 'playlists'));
-    if (srch.extrasErr && !state.results.length) blocks.push(h('div', { class: 'empty' }, h('p', {}, srch.extrasErr)));
+    if (srch.extrasErr && !state.results.length) blocks.push(h('div', { class: 'empty is-error' }, h('p', {}, srch.extrasErr)));
   }
   if (x && srch.songsDone && !songs.length && !x.top && !x.artists.length && !x.albums.length) {
     blocks.push(h('div', { class: 'empty' }, h('p', {}, `No results found for “${srch.q}”`), h('p', { class: 'small' }, 'Check the spelling, or try fewer or different words.')));
@@ -319,7 +319,7 @@ async function openMood(m, { push = true } = {}) {
     h('div', { class: 'hero', style: `--hero:${saturate(m.color)};min-height:220px` }, h('div', { class: 'hero-meta' }, h('div', { class: 'hero-kicker' }, 'Browse'), h('h1', { class: 'hero-title' }, m.title))),
     loadingBox('Loading', h('div', { class: 'section-title sk w-20' }), skeletonCards(6), h('div', { class: 'section-title sk w-20' }), skeletonCards(6)));
   let shelves;
-  try { shelves = await call('ytm_mood_page', { params: m.params }); } catch (e) { if (seq === moodSeq) body.lastChild.replaceWith(h('div', { class: 'empty' }, h('p', {}, errMsg(e)))); return; }
+  try { shelves = await call('ytm_mood_page', { params: m.params }); } catch (e) { if (seq === moodSeq) body.lastChild.replaceWith(h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e)))); return; }
   if (seq !== moodSeq) return;
   body.lastChild.replaceWith(h('div', {}, ...shelves.map((s) => h('div', {}, h('div', { class: 'section-title' }, s.title), cardRow(s.cards, 14)))));
 }

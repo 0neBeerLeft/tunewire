@@ -5,9 +5,10 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 ## Unreleased
 
-**Songs start much faster**
-- Spotify songs start about 4× faster the first time you play them (median 0.7 s instead of 2.7 s, measured on 20 songs), and the slowest ones no longer take 20 seconds
-- YouTube and YouTube Music songs get their audio straight from YouTube (about 0.3 s instead of 2 s); yt-dlp is still there as a backup
+**Songs play reliably, start to finish**
+- YouTube and YouTube Music songs no longer stop partway through: they play from YouTube's HLS audio, which plays to the end (YouTube now cuts off many direct links after about a minute)
+- If a link stops working mid-song anyway, Tunewire fetches a new one and carries on
+- No more 20-second waits: every Spotify song in our test of 20 played, the slowest in under 4 seconds (it used to be 20 s, and 1 in 4 didn't play at all)
 - Skipping is instant more often: the next three songs are prepared while one plays, and links are kept as long as they're valid
 - A source that keeps failing is skipped right away instead of holding things up
 
@@ -17,13 +18,24 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Full Spotify albums, not just the first 50 songs
 - yt-dlp keeps itself up to date and gets a JavaScript runtime, so YouTube works more reliably
 
+**Looks**
+- New artist page: a big header with the artist's photo, Popular next to their latest release, videos, related artists and an About card; the Videos section only shows the artist's own videos
+- New sleep timer: a countdown ring, +15 min and Turn off, and it doesn't cover the player
+- Hovering the song that's playing shows pause (and pauses it) instead of restarting it
+- The playlist shuffle button works every time
+- Songs without a cover get a generated one instead of a grey box
+- Tidier player bar, window buttons, empty and error screens, and rounder corners that match everywhere
+
+**Fixes**
+- Opening a share link (playlist, song, Listen together) asks once instead of twice
+
 **Your own server**
 - Accounts, friends and Listen together run on Tunewire's own server now (sign in once more after updating)
 - Downloads and updates come from yuhron.site/tunewire
 - The Windows installer refreshes the app icon, so the old logo no longer shows up after updating
 
 **Android (new)**
-- Tunewire for Android: the same app with a phone layout, playback that keeps going with the screen off, and controls on the lock screen and notification
+- Tunewire for Android: the same app with a phone layout and a full-screen player, playback that keeps going with the screen off, and controls on the lock screen and notification
 
 ## v2.3.0
 

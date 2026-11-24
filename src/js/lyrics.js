@@ -73,7 +73,7 @@ async function loadLyrics(force = false) {
     res = await call('get_lyrics', { artist: track.artist, title: track.title, album, duration: p.duration || track.duration || null });
   } catch (e) {
     if (lyrics.key !== track.key) return;
-    box.replaceChildren(h('div', { class: 'empty' }, h('p', {}, 'Couldn’t load lyrics.'), h('p', { class: 'small' }, errMsg(e))));
+    box.replaceChildren(h('div', { class: 'empty is-error' }, h('p', {}, 'Couldn’t load lyrics.'), h('p', { class: 'small' }, errMsg(e))));
     return;
   }
   if (lyrics.key !== track.key) return;

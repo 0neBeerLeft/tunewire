@@ -940,4 +940,23 @@ mod live_debug {
         let ver = page.split("\"INNERTUBE_CLIENT_VERSION\":\"").nth(1).and_then(|s| s.split('"').next());
         println!("current web client version: {ver:?}");
     }
+
+    /// The shelves of a few artist pages (TW_ARTISTS="A;B" to pick others).
+    #[test]
+    #[ignore]
+    fn artist_shelves() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let names = std::env::var("TW_ARTISTS").unwrap_or_else(|_| "Daft Punk;Drake;Central Cee".into());
+        for name in names.split(';') {
+            let (id, _) = rt.block_on(super::find_artist(name)).unwrap();
+            let a = rt.block_on(super::artist(&id)).unwrap();
+            println!("== {name} -> {} ({id})", a.name);
+            for s in &a.shelves {
+                println!("  # {}", s.title);
+                for c in s.cards.iter().take(6) {
+                    println!("     - [{}] {} | {}", c.kind, c.title, c.subtitle);
+                }
+            }
+        }
+    }
 }

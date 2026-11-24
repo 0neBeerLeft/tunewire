@@ -133,7 +133,7 @@ function renderNowPlaying(force = false) {
   const nextCard = nextItem ? h('div', { class: 'npv-card' },
     h('h4', {}, 'Next in queue', h('button', { onclick: () => showPanel('queue') }, 'Open queue')),
     (() => {
-      const row = h('div', { class: 'npv-next' }, thumbEl(nextItem.track.thumbnail),
+      const row = h('div', { class: 'npv-next' }, thumbEl(nextItem.track.thumbnail, 'thumb', nextItem.track.key || nextItem.track.title),
         h('div', { class: 't-main' }, h('div', { class: 't-title' }, nextItem.track.title), h('div', { class: 't-sub' }, nextItem.track.artist || '')));
       row.addEventListener('click', () => call('play_index_cmd', { index: (state.queue.current ?? -1) + 1 }));
       return row;
@@ -209,52 +209,87 @@ async function setDevice(id) {
   toast('Output device changed', 'ok', 1500);
 }
 
-// Sleep timer
-// A popover: the live countdown (with +15 min and Turn off) while a timer
-// runs, preset chips, and a slider for any length.
+/// Sleep timer
+// A popover built once (only the countdown text updates, so buttons never
+// flicker or miss clicks): a ring with the time left and +15 min / Turn off
+// while a timer runs, preset chips, and a slider for any length. It opens
+// upwards from the moon button, so it never covers the player bar.
+let sleepTotal = 0;
 $('#btn-sleep').addEventListener('click', (e) => openSleepTimer(e.currentTarget));
 function openSleepTimer(anchor) {
   if (openMenuEl?.classList.contains('sleep-pop')) { closeMenu(); return; }
   closeMenu();
-  const set = (minutes, endOfTrack = false) => call('set_sleep_timer', { minutes, endOfTrack }).then((r) => {
-    if (state.playback) state.playback.sleep_at = r == null ? null : r === 0 ? 0 : Date.now() + minutes * 60000;
-    toast(r == null ? 'Sleep timer off' : r === 0 ? 'Playback will stop at the end of this song' : `Sleep timer: ${fmtLen(minutes)}`, 'ok', 2000);
-    paintSleep(); paint();
-  }).catch((err) => toast(errMsg(err), 'error'));
   const fmtLen = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
-  const status = h('div', { class: 'sp-status' });
-  const chips = h('div', { class: 'sp-chips' }, ...[15, 30, 45, 60, 90].map((m) => h('button', { onclick: () => set(m) }, fmtLen(m))),
-    h('button', { onclick: () => set(null, true) }, 'End of song'));
-  const val = h('b', {}, '20 min');
+  const set = (minutes, endOfTrack = false, { close = false } = {}) => call('set_sleep_timer', { minutes, endOfTrack }).then((r) => {
+    if (state.playback) state.playback.sleep_at = r == null ? null : r === 0 ? 0 : Date.now() + minutes * 60000;
+    sleepTotal = r > 0 ? minutes * 60000 : 0;
+    toast(r == null ? 'Sleep timer off' : r === 0 ? 'The music stops at the end of this song' : `The music stops in ${fmtLen(minutes)}`, 'ok', 2000);
+    paintSleep();
+    if (close) closeMenu(); else paint(true);
+  }).catch((err) => toast(errMsg(err), 'error'));
+
+  // Running: a ring with the time left, and +15 min / Turn off.
+  const R = 34, C = 2 * Math.PI * R;
+  const ring = h('div', { class: 'sp-ring', html: `<svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="sp-ring-bg"/><circle cx="40" cy="40" r="${R}" class="sp-ring-fg" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>` });
+  const fg = ring.querySelector('.sp-ring-fg');
+  const time = h('span', { class: 'sp-time' });
+  const sub = h('span', { class: 'sp-sub' });
+  const plus = h('button', { class: 'sp-btn', onclick: () => { const at = state.playback?.sleep_at; set((at > 0 ? Math.ceil((at - Date.now()) / 60000) : 0) + 15); } }, '+15 min');
+  const off = h('button', { class: 'sp-btn', onclick: () => set(null) }, 'Turn off');
+  const running = h('div', { class: 'sp-running' },
+    h('div', { class: 'sp-dial' }, ring, h('div', { class: 'sp-readout' }, time, sub)),
+    h('div', { class: 'sp-actions' }, plus, off));
+  const idle = h('p', { class: 'sp-hint' }, 'Fall asleep to your music. It pauses on its own.');
+
+  const chip = (label, onClick) => h('button', { class: 'sp-chip', onclick: onClick }, label);
+  const chips = h('div', { class: 'sp-chips' },
+    ...[15, 30, 45, 60, 90].map((m) => chip(fmtLen(m), () => set(m, false, { close: true }))),
+    chip('End of song', () => set(null, true, { close: true })));
+
+  const val = h('b', { class: 'sp-val' });
   const range = h('input', { type: 'range', min: 5, max: 180, step: 5, value: 20, 'aria-label': 'Minutes' });
   const fill = () => { val.textContent = fmtLen(Number(range.value)); range.style.setProperty('--fill', `${((range.value - 5) / 175) * 100}%`); };
   range.addEventListener('input', fill);
   fill();
-  const custom = h('div', { class: 'sp-custom' }, h('div', { class: 'sp-custom-top' }, h('span', { class: 'meta' }, 'Custom'), val), range,
-    h('button', { class: 'btn primary small', onclick: () => set(Number(range.value)) }, 'Start'));
+  const custom = h('div', { class: 'sp-custom' },
+    h('div', { class: 'sp-custom-top' }, h('span', {}, 'Custom'), val),
+    h('div', { class: 'sp-custom-row' }, range, h('button', { class: 'sp-start', onclick: () => set(Number(range.value), false, { close: true }) }, 'Start')));
+
   const pop = h('div', { class: 'menu sleep-pop', role: 'dialog', 'aria-label': 'Sleep timer' },
-    h('div', { class: 'sp-head' }, h('span', { class: 'sp-ico', html: icon('moon') }), h('b', {}, 'Sleep timer')), status, chips, custom);
-  function paint() {
+    h('div', { class: 'sp-head' }, h('span', { class: 'sp-ico', html: icon('moon') }), h('b', {}, 'Sleep timer')),
+    running, idle, chips, custom);
+
+  let mode = '';
+  function paint(force = false) {
     const at = state.playback?.sleep_at;
-    if (at == null) { status.replaceChildren(h('p', { class: 'meta' }, 'Stop the music after a while.')); return; }
-    if (at === 0) {
-      status.replaceChildren(h('div', { class: 'sp-count' }, h('span', { class: 'sp-time small' }, 'End of this song')),
-        h('div', { class: 'actions' }, h('button', { class: 'btn small', onclick: () => set(null) }, 'Turn off')));
-      return;
+    const m = at == null ? 'idle' : at === 0 ? 'song' : 'time';
+    if (m !== mode || force) {
+      mode = m;
+      running.hidden = m === 'idle';
+      idle.hidden = m !== 'idle';
+      plus.hidden = m === 'song';
     }
-    const left = Math.max(0, at - Date.now());
-    const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
-    status.replaceChildren(h('div', { class: 'sp-count' }, h('span', { class: 'sp-time' }, `${mm}:${String(ss).padStart(2, '0')}`), h('span', { class: 'meta' }, 'until the music stops')),
-      h('div', { class: 'actions' },
-        h('button', { class: 'btn small', onclick: () => set(Math.ceil(left / 60000) + 15) }, '+15 min'),
-        h('button', { class: 'btn small', onclick: () => set(null) }, 'Turn off')));
+    if (m === 'song') {
+      time.textContent = '♪';
+      sub.textContent = 'after this song';
+      fg.style.strokeDashoffset = '0';
+    } else if (m === 'time') {
+      const left = Math.max(0, at - Date.now());
+      const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+      time.textContent = mm >= 60 ? `${Math.floor(mm / 60)}:${String(mm % 60).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
+      sub.textContent = 'left';
+      if (!sleepTotal || sleepTotal < left) sleepTotal = Math.ceil(left / 300000) * 300000;
+      fg.style.strokeDashoffset = String(C * (1 - left / sleepTotal));
+    }
   }
-  paint();
+  paint(true);
   const tick = setInterval(() => { if (!pop.isConnected) { clearInterval(tick); return; } paint(); }, 1000);
   document.body.append(pop);
+  // Anchored by its bottom edge: it grows upwards when the countdown appears.
   const r = anchor.getBoundingClientRect();
-  pop.style.left = `${Math.max(8, Math.min(r.right - pop.offsetWidth, window.innerWidth - pop.offsetWidth - 8))}px`;
-  pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 10)}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - pop.offsetWidth / 2, window.innerWidth - pop.offsetWidth - 8))}px`;
+  pop.style.top = 'auto';
+  pop.style.bottom = `${Math.max(8, window.innerHeight - r.top + 10)}px`;
   pop.onClose = () => clearInterval(tick);
   openMenuEl = pop;
 }
@@ -262,10 +297,15 @@ function paintSleep() {
   const btn = $('#btn-sleep');
   const at = state.playback?.sleep_at;
   btn.classList.toggle('on', at != null);
-  btn.querySelector('.sleep-left')?.remove();
-  if (at > 0) btn.append(h('span', { class: 'sleep-left' }, String(Math.max(1, Math.round((at - Date.now()) / 60000)))));
+  const mins = at > 0 ? Math.max(1, Math.round((at - Date.now()) / 60000)) : 0;
+  btn.title = at == null ? 'Sleep timer' : at === 0 ? 'Sleep timer: stops after this song' : `Sleep timer: ${mins} min left`;
+  const label = at == null ? '' : at === 0 ? '♪' : String(mins);
+  let badge = btn.querySelector('.sleep-left');
+  if (!label) { badge?.remove(); return; }
+  if (!badge) { badge = h('span', { class: 'sleep-left' }); btn.append(badge); }
+  if (badge.textContent !== label) badge.textContent = label;
 }
-setInterval(paintSleep, 30000);
+setInterval(paintSleep, 15000);
 
 // Full screen player
 const fsp = { el: null };
@@ -357,3 +397,19 @@ function offerYtdlpInstall(message) {
     }
   });
 }
+
+// Player bar, right side: the buttons in tidy groups (views · Together ·
+// output and sleep · volume · full screen) instead of a loose row.
+(function groupSideControls() {
+  const bar = $('.side-controls');
+  if (!bar) return;
+  const group = (cls, ids) => {
+    const box = h('div', { class: `sc-group ${cls}` });
+    for (const id of ids) { const el = document.getElementById(id); if (el) box.append(el); }
+    return box;
+  };
+  const views = group('views', ['btn-np', 'btn-lyrics', 'toggle-queue']);
+  const out = group('out', ['btn-device', 'btn-sleep']);
+  const vol = group('vol', ['btn-mute', 'volume']);
+  bar.replaceChildren(...[$('#plugin-player-slot'), views, $('#btn-jam'), out, vol, $('#btn-full'), $('#btn-more')].filter(Boolean));
+})();

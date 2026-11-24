@@ -264,12 +264,46 @@ function miniLogo(platform, { button = false, title } = {}) {
 /** YouTube's gray "no picture" image (sent with a 404, so no error event). */
 const isYtPlaceholder = (img) => /ytimg\.com\//.test(img.src) && img.naturalWidth === 120 && img.naturalHeight === 90;
 
-function thumbEl(src, cls = 'thumb') {
+/**
+ * A cover for music without one: a dark, softly tinted gradient with a note,
+ * in muted tones that sit with the app's glass look. The same seed (a link
+ * or a title) always gives the same cover.
+ */
+const genCovers = new Map();
+function genCover(seed = '') {
+  const key = String(seed);
+  if (genCovers.has(key)) return genCovers.get(key);
+  let x = 2166136261;
+  for (const ch of key) x = Math.imul(x ^ ch.charCodeAt(0), 16777619);
+  const hue = Math.abs(x) % 360;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},22%,30%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},18%,12%)"/></linearGradient><radialGradient id="r" cx=".28" cy=".22" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="120" height="120" fill="url(#g)"/><rect width="120" height="120" fill="url(#r)"/><path d="M52 40v32.5a9 9 0 1 0 5 8V52l22-5v18.5a9 9 0 1 0 5 8V34z" fill="#fff" fill-opacity=".34"/></svg>`;
+  const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  if (genCovers.size > 300) genCovers.clear();
+  genCovers.set(key, url);
+  return url;
+}
+
+// YouTube's "no thumbnail" picture (a grey 120×90 box with dots), anywhere
+// in the app: swapped for a generated cover before the element's own
+// handlers see it.
+document.addEventListener('load', (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && isYtPlaceholder(img)) {
+    e.stopPropagation();
+    img.style.visibility = '';
+    img.src = genCover(img.src.split('/vi/')[1]?.split('/')[0] || img.src);
+  }
+}, true);
+
+/** "1 song", "12 songs". */
+function songCount(n) { return `${n} song${n === 1 ? '' : 's'}`; }
+
+function thumbEl(src, cls = 'thumb', seed = src) {
   const t = h('div', { class: cls });
-  const missing = (img) => { img.remove(); t.innerHTML = icon('music'); };
+  const missing = (img) => { img.remove(); t.append(h('img', { src: genCover(seed || ''), alt: '' })); };
   // Decoded off the main thread: rows scrolling into view don't stall a frame.
   if (src) t.append(h('img', { src, loading: 'lazy', decoding: 'async', alt: '', referrerpolicy: 'no-referrer', onerror: (e) => missing(e.target), onload: (e) => { if (isYtPlaceholder(e.target)) missing(e.target); } }));
-  else t.innerHTML = icon('music');
+  else t.append(h('img', { src: genCover(seed || ''), alt: '' }));
   return t;
 }
 
@@ -461,7 +495,14 @@ function promptModal({ title, label, value = '', okLabel = 'OK', placeholder = '
   });
 }
 
+const openQuestions = new Set();
 function confirmModal({ title, message, okLabel = 'OK', danger = false }) {
+  // The same question twice at once (a double click, an event that fired
+  // twice) shows one dialog; the extra one counts as "Cancel".
+  const key = `${title}
+${message}`;
+  if (openQuestions.has(key)) return Promise.resolve(false);
+  openQuestions.add(key);
   return new Promise((resolve) => {
     let done = false;
     const m = openModal({
@@ -471,7 +512,7 @@ function confirmModal({ title, message, okLabel = 'OK', danger = false }) {
         h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'),
         h('button', { class: `btn ${danger ? 'danger' : 'primary'}`, onclick: () => { done = true; m.close(); resolve(true); } }, okLabel),
       ],
-      onClose: () => { if (!done) resolve(false); },
+      onClose: () => { openQuestions.delete(key); if (!done) resolve(false); },
     });
   });
 }

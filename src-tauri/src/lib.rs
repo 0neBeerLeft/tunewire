@@ -64,7 +64,6 @@ mod themes;
 mod ytdlp;
 mod ytdlp_worker;
 mod ytm;
-mod ytnative;
 
 #[cfg(test)]
 mod bench;
@@ -150,11 +149,10 @@ pub fn run() {
     let builder = builder
         // One app window: opening a tunewire:// link (or the app again) goes
         // to the running instance.
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        // (The plugin's deep-link feature hands the link to on_open_url below;
+        // emitting it here too opened every link's popup twice.)
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main(app);
-            if let Some(url) = argv.iter().find(|a| a.starts_with("tunewire://")) {
-                let _ = tauri::Emitter::emit(app, "deep-link", url.clone());
-            }
         }))
         // Never restore the window frame from saved state: a state file from a
         // build with the native frame brought back Windows' own title bar on
@@ -171,7 +169,6 @@ pub fn run() {
             let data = app.path().app_data_dir()?;
             let cache = app.path().app_cache_dir().unwrap_or_else(|_| data.join("cache"));
             stream::set_cache_dir(cache.join("streams"));
-            ytnative::init(&cache);
             let store = Store::open(data.clone())?;
             secrets::set_dir(&data);
             #[cfg(target_os = "android")]

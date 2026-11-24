@@ -53,6 +53,12 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
       if (typeof showPanel === 'function') showPanel('now');
     }, true);
   }
+  // Now playing open: the mini player grows into the full controls
+  // (scrubber with times, shuffle / previous / play / next / repeat).
+  const syncFull = () => document.body.classList.toggle('np-full', typeof panelOpen === 'function' && panelOpen() && state.panel === 'now');
+  new MutationObserver(syncFull).observe(app, { attributes: true, attributeFilter: ['class'] });
+  for (const b of $$('.panel-tabs button')) b.addEventListener('click', () => setTimeout(syncFull, 0));
+  syncFull();
   // Android's back gesture: close a sheet first.
   window.addEventListener('popstate', () => {
     if (document.body.classList.contains('lib-open')) document.body.classList.remove('lib-open');

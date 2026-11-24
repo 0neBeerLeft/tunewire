@@ -187,7 +187,7 @@ async function sendSongToFriend(track) {
   const m = openModal({
     title: 'Send to a friend',
     body: h('div', { class: 'send-box' },
-      h('div', { class: 'send-song' }, thumbEl(track.thumbnail), h('div', { class: 'min-w-0' }, h('b', { class: 'ellipsis' }, track.title), h('div', { class: 'meta ellipsis' }, track.artist || ''))),
+      h('div', { class: 'send-song' }, thumbEl(track.thumbnail, 'thumb', track.key || track.title), h('div', { class: 'min-w-0' }, h('b', { class: 'ellipsis' }, track.title), h('div', { class: 'meta ellipsis' }, track.artist || ''))),
       search, list, note),
     footer: [h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'), send],
   });
@@ -209,7 +209,7 @@ async function renderInbox(box) {
     return h('div', { class: `inbox-item${r.read ? '' : ' unread'}` },
       h('div', { class: 'inbox-from' }, decoratedAvatar(r.sender?.avatar, r.sender?.name, r.sender?.decoration, 'avatar'), h('button', { class: 'friend-name', onclick: () => openProfile(r.from_user) }, r.sender?.name || 'Someone'), h('span', { class: 'meta' }, timeAgo(Date.parse(r.created_at)))),
       r.note ? h('p', { class: 'inbox-note' }, r.note) : null,
-      h('div', { class: 'inbox-song' }, thumbEl(t.thumbnail),
+      h('div', { class: 'inbox-song' }, thumbEl(t.thumbnail, 'thumb', t.key || t.title),
         h('div', { class: 'grow min-w-0' }, h('b', { class: 'ellipsis' }, t.title), h('div', { class: 'meta ellipsis' }, t.artist || '')),
         h('button', { class: 'icon-btn', title: 'Play', html: icon('play'), disabled: !t.versions.length, onclick: () => playTrack(t) }),
         h('button', { class: 'icon-btn', title: 'Add to queue', html: icon('plus'), disabled: !t.versions.length, onclick: () => enqueue([t]) })),

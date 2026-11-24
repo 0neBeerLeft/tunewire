@@ -203,6 +203,7 @@ pub async fn stream(url: &str) -> AppResult<StreamInfo> {
             thumbnail: artwork(&t),
             filesize: None,
             headers: Default::default(),
+            refresh: Default::default(),
         })
     })
     .await

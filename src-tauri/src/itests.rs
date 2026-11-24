@@ -403,6 +403,7 @@ fn hls_info(port: u16) -> ytdlp::StreamInfo {
         thumbnail: None,
         filesize: None,
         headers: Default::default(),
+        refresh: Default::default(),
     }
 }
 

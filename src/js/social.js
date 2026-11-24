@@ -318,10 +318,18 @@ function parseShareLink(url) {
   return { kind: m[1], code: LINK_CODES[m[1]].test(code) ? code : null };
 }
 
+// The same link can arrive more than once (the start-up link and the
+// running-app event, a double click in the browser): handle it once.
+const recentLinks = new Map();
+
 /** Handled (true), or not one of our links (false). */
 function handleShareLink(url) {
   const link = parseShareLink(url);
   if (!link) return false;
+  const key = `${link.kind}:${link.code}`;
+  const now = Date.now();
+  if (now - (recentLinks.get(key) || 0) < 15000) return true;
+  recentLinks.set(key, now);
   if (!link.code) { toast('That Tunewire link is broken or incomplete', 'error'); return true; }
   const { kind, code } = link;
   if (kind === 's') confirmSongLink(code);
@@ -339,7 +347,7 @@ function confirmSongLink(code) {
   const m = openModal({
     title: 'Play a shared song?',
     body: h('div', { class: 'link-sheet' },
-      thumbEl(t.thumbnail, 'thumb big'),
+      thumbEl(t.thumbnail, 'thumb big', t.key || t.title),
       h('div', {}, h('b', {}, t.title), h('div', { class: 'meta' }, t.artist || 'Unknown artist'),
         h('div', { class: 'link-sources' }, ...t.versions.map((v) => badge(v.platform, { short: true }))))),
     footer: [
@@ -389,8 +397,11 @@ async function followShared(remote) {
   } catch (e) { toast(errMsg(e), 'error'); }
 }
 
+let joiningPlaylist = null;
 async function joinCollaborative(code) {
+  if (joiningPlaylist === code) return;
   if (!(await requireAccount({ why: 'Sign in to join this playlist' }))) return;
+  joiningPlaylist = code;
   try {
     const id = await rpc('join_playlist', { code });
     const existing = state.playlists.find((p) => p.cloud_id === id);
@@ -404,7 +415,7 @@ async function joinCollaborative(code) {
     syncOneSoon(id, 0);
     openPlaylist(pl.id);
     toast(`You joined “${row.title}”. Your changes show up for everyone.`, 'ok', 3000);
-  } catch (e) { toast(errMsg(e), 'error'); }
+  } catch (e) { toast(errMsg(e), 'error'); } finally { joiningPlaylist = null; }
 }
 
 // Listen Together -----------------------------------------------------------------------
@@ -1322,7 +1333,7 @@ async function openProfile(userId, { push = true, tab = 'playlists' } = {}) {
       const t = fromCloudTrack(np.track);
       const pos = livePosition(np);
       return h('div', { class: 'now-card' },
-        thumbEl(t.thumbnail, 'thumb big'),
+        thumbEl(t.thumbnail, 'thumb big', t.key || t.title),
         h('div', { class: 'grow min-w-0' },
           h('div', { class: 'now-kicker' }, h('span', { class: 'sync-dot' }), 'Listening now'),
           h('b', { class: 'ellipsis' }, t.title), h('div', { class: 'meta ellipsis' }, t.artist || ''),
@@ -1400,7 +1411,7 @@ async function openProfile(userId, { push = true, tab = 'playlists' } = {}) {
     };
     render();
     heroColor(body, mediaUrl(p.avatar));
-  } catch (e) { if (seq === profileSeq) body.replaceChildren(h('div', { class: 'empty' }, h('p', {}, errMsg(e)))); }
+  } catch (e) { if (seq === profileSeq) body.replaceChildren(h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e)))); }
 }
 
 // Wrapped: compare with approved friends ------------------------------------------------------------

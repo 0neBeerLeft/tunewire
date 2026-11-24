@@ -25,7 +25,7 @@ function fmtHours(m) {
 function mixArt(covers, cls = 'mix-art') {
   const list = (covers || []).filter(Boolean);
   const box = h('div', { class: `${cls}${list.length < 4 ? ' single' : ' grid4'}` });
-  if (!list.length) { box.innerHTML = icon('music'); return box; }
+  if (!list.length) { box.append(h('img', { src: genCover(cls), alt: '' })); return box; }
   const px = cls.includes('hero-art') ? 500 : cls.includes('shortcut') ? 120 : 300;
   for (const url of list.length < 4 ? list.slice(0, 1) : list.slice(0, 4)) {
     box.append(h('img', { src: url, 'data-px': list.length < 4 ? px : Math.round(px / 2), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: (e) => { e.target.style.visibility = 'hidden'; } }));
@@ -55,7 +55,8 @@ function featuredMix(mix) {
     backdrop ? h('img', { class: 'home-feature-backdrop', src: backdrop, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
     h('div', { class: 'home-feature-copy' },
       h('div', { class: 'home-feature-kicker' }, label),
-      h('h2', {}, mix.title),
+      // A short last word ("Daily Mix 1") stays on the line before it.
+      h('h2', {}, mix.title.replace(/ (\S{1,3})$/, ' $1')),
       h('p', {}, mix.subtitle || 'A fresh mix built around the music you love.'),
       h('div', { class: 'home-feature-actions' },
         playButton(h('button', { class: 'btn primary big' }), () => playingOneOf(mix.tracks), () => playList(mix.tracks, 0), 'Play mix'),
@@ -114,7 +115,8 @@ async function renderHome() {
   const refreshBtn = h('button', { class: 'btn small', html: `${icon('refresh')}New mixes`, title: 'Build new mixes now', onclick: () => refreshHome(true, refreshBtn) });
   if (made.length || d.stale || home.refreshing) {
     blocks.push(h('div', { class: 'home-block' },
-      h('div', { class: 'section-title' }, featured ? 'More made for you' : 'Made for you', h('span', { class: 'meta ml-8' }, 'Daily Mixes update every day, Discover Weekly every Monday'), h('span', { class: 'ml-auto' }), refreshBtn),
+      h('div', { class: 'section-title' }, featured ? 'More made for you' : 'Made for you', h('span', { class: 'ml-auto' }), refreshBtn),
+      h('p', { class: 'section-sub' }, 'Daily Mixes update every day, Discover Weekly every Monday'),
       madeRow));
   }
 
@@ -251,7 +253,7 @@ async function renderStats(range = statsUi.range) {
       h('button', { class: 'btn wrapped-btn', html: `${icon('gift')}${year} Wrapped`, onclick: () => openWrapped(year) })));
   if (!body.firstChild) body.replaceChildren(head, loadingBox('Counting your listening', skeletonStats(4), h('div', { class: 'track-list' }, ...skeletonRows(5))));
   let s;
-  try { s = await call('listening_stats', { range }); } catch (e) { body.replaceChildren(head, h('div', { class: 'empty' }, h('p', {}, errMsg(e)))); return; }
+  try { s = await call('listening_stats', { range }); } catch (e) { body.replaceChildren(head, h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e)))); return; }
   if (seq !== statsUi.seq) return;
   if (!s.plays && !s.skips) {
     body.replaceChildren(head, h('div', { class: 'empty' }, h('span', { class: 'big', html: icon('pulse') }), h('p', {}, 'Nothing here yet.'),

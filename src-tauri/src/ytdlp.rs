@@ -229,6 +229,28 @@ pub struct StreamInfo {
     pub filesize: Option<u64>,
     #[serde(skip)]
     pub headers: HashMap<String, String>,
+    /// Gets a new link to the same file (same format, so the same bytes)
+    /// for when this one stops working mid-song.
+    #[serde(skip)]
+    pub refresh: Refresher,
+}
+
+/// A way to get a new link to the same audio file, for a YouTube link that
+/// stops working mid-song (refused after the first megabyte, or expired).
+#[derive(Clone, Default)]
+pub struct Refresher(pub Option<std::sync::Arc<dyn Fn() -> AppResult<String> + Send + Sync>>);
+
+impl std::fmt::Debug for Refresher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "Refresher(..)" } else { "Refresher(none)" })
+    }
+}
+
+impl Refresher {
+    /// yt-dlp's link for one format of a YouTube video.
+    pub fn ytdlp(page: String, format: String) -> Self {
+        Self(Some(std::sync::Arc::new(move || tauri::async_runtime::block_on(extract_stream_with_format(&page, &format)).map(|i| i.url))))
+    }
 }
 
 /// Format preference: AAC/MP3 first (cheap, precise seeking), then Opus/WebM
@@ -237,6 +259,12 @@ pub struct StreamInfo {
 /// HE-AACv2 (`.29`) need SBR/PS decoding, which symphonia doesn't have. It
 /// plays only their low-band core: no treble above ~11 kHz and often mono,
 /// which sounds muffled and boomy ("bass boosted"). Opus is next best.
+/// YouTube: the HLS audio (format 234, AAC-LC ~128 kbps) first. Its direct
+/// links (140/251) now often answer 403 at once or stop after the first
+/// megabyte (about a minute in) without a proof-of-origin token; the HLS
+/// segments play to the end. Then the direct formats, as before.
+pub const YOUTUBE_FORMAT: &str = "234/bestaudio[acodec=mp4a.40.2]/bestaudio[acodec=opus]/bestaudio[acodec!*=mp4a.40.5][acodec!*=mp4a.40.29]/bestaudio";
+
 pub const AUDIO_FORMAT: &str =
     "bestaudio[acodec=mp4a.40.2]/bestaudio[acodec=mp3]/bestaudio[acodec=opus]/bestaudio[acodec=flac]/bestaudio[acodec=vorbis]/bestaudio[acodec!*=mp4a.40.5][acodec!*=mp4a.40.29]/bestaudio";
 
@@ -396,41 +424,28 @@ pub async fn extract_stream(url: &str) -> AppResult<StreamInfo> {
             return Ok(info);
         }
     }
-    // YouTube's player API directly (~0.3 s, yt-dlp: ~2 s). If it hasn't
-    // answered after NATIVE_HEAD_START, yt-dlp starts too and the first good
-    // answer wins; if it fails, yt-dlp alone.
-    if crate::search::native_apis() && crate::ytnative::usable() && crate::ytnative::video_id(url).is_some() {
-        const NATIVE_HEAD_START: Duration = Duration::from_millis(1200);
-        let native = crate::ytnative::stream_tracked(url);
-        tokio::pin!(native);
-        tokio::select! {
-            r = &mut native => if let Ok(info) = r { return Ok(info) },
-            _ = tokio::time::sleep(NATIVE_HEAD_START) => {
-                let fallback = extract_stream_with_format(url, AUDIO_FORMAT);
-                tokio::pin!(fallback);
-                return tokio::select! {
-                    r = &mut native => match r {
-                        Ok(info) => Ok(info),
-                        Err(_) => fallback.await,
-                    },
-                    r = &mut fallback => match r {
-                        Ok(info) => Ok(info),
-                        Err(e) => native.await.map_err(|_| e),
-                    },
-                };
-            }
-        }
+    if is_youtube(url) {
+        return extract_stream_with_format(url, YOUTUBE_FORMAT).await;
     }
     extract_stream_with_format(url, AUDIO_FORMAT).await
 }
 
+fn is_youtube(url: &str) -> bool {
+    url.contains("youtube.com/") || url.contains("youtu.be/")
+}
+
 pub async fn extract_stream_with_format(url: &str, format: &str) -> AppResult<StreamInfo> {
+    // The HLS manifest holds YouTube's HLS audio (234, see YOUTUBE_FORMAT);
+    // otherwise it (and DASH, ~0.5 s more per song) only adds video variants.
+    let hls = format.starts_with("234");
+    let skip: Vec<&str> = if hls { vec!["dash"] } else { vec!["hls", "dash"] };
     let args = |fast: bool| {
         let mut a: Vec<String> = vec!["-j".into(), "--no-warnings".into(), "--no-playlist".into(), "-f".into(), format.into()];
         if fast {
-            // Audio comes from the player API's direct formats; the HLS/DASH
-            // manifests (~0.5 s more per song) only add video variants.
-            a.extend(["--extractor-args".into(), "youtube:skip=hls,dash".into()]);
+            // The HLS audio comes from the visionOS client: asking only it
+            // takes ~2.3 s instead of ~8 s (yt-dlp asks two clients in turn).
+            let client = if hls { "player_client=visionos;" } else { "" };
+            a.extend(["--extractor-args".into(), format!("youtube:{client}skip={}", skip.join(","))]);
         }
         a.extend(["--".into(), url.into()]);
         a
@@ -442,10 +457,17 @@ pub async fn extract_stream_with_format(url: &str, format: &str) -> AppResult<St
     let mut steps: Vec<Value> = Vec::new();
     // (Only the worker takes these options; the command line keeps its own.)
     if youtube && crate::ytdlp_worker::available(&binary()).await {
-        if let Some(vd) = visitor_data().await {
-            steps.push(serde_json::json!({ "youtube": { "skip": ["hls", "dash"], "player_skip": ["webpage", "initial_data"], "visitor_data": [vd] } }));
+        if hls {
+            // Only the client that has the HLS audio (see `args`).
+            if let Some(vd) = visitor_data().await {
+                steps.push(serde_json::json!({ "youtube": { "player_client": ["visionos"], "skip": skip, "player_skip": ["webpage", "initial_data"], "visitor_data": [vd] } }));
+            }
+            steps.push(serde_json::json!({ "youtube": { "player_client": ["visionos"], "skip": skip } }));
         }
-        steps.push(serde_json::json!({ "youtube": { "skip": ["hls", "dash"] } }));
+        if let Some(vd) = visitor_data().await {
+            steps.push(serde_json::json!({ "youtube": { "skip": skip, "player_skip": ["webpage", "initial_data"], "visitor_data": [vd] } }));
+        }
+        steps.push(serde_json::json!({ "youtube": { "skip": skip } }));
     }
     steps.push(serde_json::json!({}));
     let mut worker = Ok(None);
@@ -456,6 +478,8 @@ pub async fn extract_stream_with_format(url: &str, format: &str) -> AppResult<St
         worker = crate::ytdlp_worker::extract(&binary(), url, opts).await;
         let last = i + 1 == steps.len();
         let skips_page = extractor_args["youtube"].get("player_skip").is_some();
+        // A step that asks one client only: any failure tries the others.
+        let one_client = extractor_args["youtube"].get("player_client").is_some();
         match &worker {
             Err(e) if !last => {
                 let m = e.to_string().to_lowercase();
@@ -465,7 +489,7 @@ pub async fn extract_stream_with_format(url: &str, format: &str) -> AppResult<St
                     forget_visitor_data();
                 }
                 let sign_in = m.contains("sign in") || m.contains("not a bot");
-                if !(m.contains("format") || (skips_page && sign_in)) {
+                if !(one_client || m.contains("format") || (skips_page && sign_in)) {
                     break;
                 }
             }
@@ -512,6 +536,12 @@ pub async fn extract_stream_with_format(url: &str, format: &str) -> AppResult<St
         thumbnail: s(&v, "thumbnail"),
         filesize: fmt.get("filesize").or_else(|| fmt.get("filesize_approx")).and_then(Value::as_u64),
         headers,
+        // A direct YouTube link can stop working mid-song: playback asks
+        // yt-dlp again for the same format and carries on (if it's the same file).
+        refresh: match (is_youtube(url), fmt.get("protocol").and_then(Value::as_str), fmt.get("format_id").and_then(Value::as_str)) {
+            (true, Some("https"), Some(id)) => Refresher::ytdlp(url.to_string(), id.to_string()),
+            _ => Refresher::default(),
+        },
     })
 }
 
@@ -835,5 +865,65 @@ mod freshness_tests {
         println!("deno unpacked: {} MB", size / 1_048_576);
         assert!(size > 20 * 1_048_576);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod play_to_the_end {
+    /// Plays (reads) whole YouTube songs through the app's own path:
+    /// extraction (HLS audio first), then the stream reader to the last byte.
+    /// TW_VIDEOS="id1;id2" picks others.
+    #[test]
+    #[ignore]
+    fn live_youtube_songs_play_to_the_end() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let ids = std::env::var("TW_VIDEOS").unwrap_or_else(|_| "1VMTZjJIZpo;BL3F0GedGdg;4NRXx6U8ABQ;dJ1Wws-h1dE".into());
+        let mut failed = Vec::new();
+        for id in ids.split(';') {
+            let t = std::time::Instant::now();
+            let info = match rt.block_on(super::extract_stream(&format!("https://music.youtube.com/watch?v={id}"))) {
+                Ok(i) => i,
+                Err(e) => {
+                    println!("{id}: no link: {e}");
+                    failed.push(id);
+                    continue;
+                }
+            };
+            let opened = match crate::stream::open(&info) {
+                Ok(o) => o,
+                Err(e) => {
+                    println!("{id}: open failed ({:?}): {e}", info.protocol);
+                    failed.push(id);
+                    continue;
+                }
+            };
+            let first = t.elapsed();
+            let hint = opened.hint.clone();
+            // Decode the whole song, then check a seek near the end works.
+            let mut dec = match crate::decoder::AudioDecoder::new(opened.reader, hint.as_deref()) {
+                Ok(d) => d,
+                Err(e) => {
+                    println!("{id}: decoder failed (hint {hint:?}): {e}");
+                    failed.push(id);
+                    continue;
+                }
+            };
+            let (ch, rate) = (u64::from(dec.channels().max(1)), u64::from(dec.sample_rate().max(1)));
+            let samples = dec.by_ref().count() as u64;
+            let secs = samples as f64 / (ch * rate) as f64;
+            let want = info.duration.unwrap_or(0.0);
+            let mut seek = crate::stream::open(&info).ok().and_then(|o| crate::decoder::AudioDecoder::new(o.reader, o.hint.as_deref()).ok());
+            let seek_ok = seek.as_mut().map(|d| d.try_seek(std::time::Duration::from_secs_f64(want * 0.8)).is_ok() && d.take(4096).count() == 4096).unwrap_or(false);
+            println!(
+                "{id}: {:?} hint {hint:?}, first audio {first:?}, decoded {secs:.1} s of {want:.1} s ({ch} ch, {rate} Hz), seek near end {}, total {:?}",
+                info.protocol,
+                if seek_ok { "ok" } else { "FAILED" },
+                t.elapsed()
+            );
+            if (secs - want).abs() > 3.0 || !seek_ok {
+                failed.push(id);
+            }
+        }
+        assert!(failed.is_empty(), "didn't play to the end: {failed:?}");
     }
 }

@@ -166,7 +166,7 @@ function trackRow(track, index, opts = {}) {
 
   row.append(...[
     num,
-    h('div', { class: 't-titlecell' }, opts.noCover ? null : thumbEl(track.thumbnail),
+    h('div', { class: 't-titlecell' }, opts.noCover ? null : thumbEl(track.thumbnail, 'thumb', track.key || track.title),
       h('div', { class: 't-main' },
         h('div', { class: 't-title', title: track.title },
           state.downloadKeys.has(track.key) ? h('span', { class: 'dl-mark', title: 'Downloaded', html: icon('saved') }) : null,
@@ -220,7 +220,11 @@ document.addEventListener('click', (e) => {
     e.stopPropagation();
     const t = row._track;
     switch (act.dataset.act) {
-      case 'play': rowPlay(row); break;
+      case 'play':
+        // The song that's already on: pause / resume instead of restarting it.
+        if (row.classList.contains('playing') && ['playing', 'paused'].includes(state.playback?.status)) call('toggle_pause').catch((err) => toast(errMsg(err), 'error'));
+        else rowPlay(row);
+        break;
       case 'src': playTrack(t, act.dataset.platform); break;
       case 'like': toggleFavorite(t); break;
       case 'menu': openRowMenu(row, act); break;
@@ -560,6 +564,17 @@ function playingOneOf(tracks) {
   return tracks instanceof Set ? tracks.has(k) : tracks.some((t) => t.key === k);
 }
 
+/** The hover button of a row: pause on the song that's playing, play otherwise. */
+function setRowButton(row, playing) {
+  const btn = row.querySelector('.t-num [data-act="play"]');
+  if (!btn || btn._pause === playing) return;
+  btn._pause = playing;
+  btn.innerHTML = icon(playing ? 'pause' : 'play');
+  const label = `${playing ? 'Pause' : 'Play'} ${row._track?.title || ''}`.trim();
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
 function markPlaying() {
   syncPlayButtons();
   lastMark = `${playingKey()}|${state.playback?.status}|${state.loadingKey}`;
@@ -571,10 +586,12 @@ function markPlaying() {
     if (rows.includes(row)) continue;
     row.classList.remove('playing', 'loading');
     row.querySelector('.t-num .spinner')?.remove();
+    setRowButton(row, false);
   }
   for (const row of rows) {
     const k = row.dataset.key;
     row.classList.toggle('playing', k === key && status !== 'idle');
+    setRowButton(row, k === key && status === 'playing');
     const loading = (status === 'loading' && k === key) || (k === state.loadingKey && status !== 'playing');
     row.classList.toggle('loading', loading);
     const num = row.querySelector('.t-num');
@@ -655,7 +672,7 @@ function openVersions(track, opts = {}) {
       h('button', { class: 'btn primary', onclick: go, html: `${icon('play')}Play` }),
     ];
   const m = openModal({ title: '', body: h('div', {}, list, note), footer });
-  const art = thumbEl(track.thumbnail, 'art');
+  const art = thumbEl(track.thumbnail, 'art', track.key || track.title);
   m.modal.querySelector('header').replaceWith(h('div', { class: 'modal-hero' }, art,
     h('div', { class: 'min-w-0' }, h('div', { class: 'kicker' }, ''),
       h('h2', {}, track.title), h('div', { class: 'muted' }, track.artist || 'Unknown artist'))));

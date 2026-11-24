@@ -68,7 +68,7 @@ async function renderDiscover(force = false) {
   // Based on: your artists, so it's clear where the picks come from.
   const basis = h('div', { class: 'disc-basis' }, h('span', { class: 'muted' }, 'Based on'),
     ...disc.taste.map((a) => h('button', { class: 'disc-basis-artist', title: `Open ${a.name}`, onclick: () => openArtist(a.name, null, { thumbnail: a.thumbnail }) },
-      thumbEl(a.thumbnail, 'thumb round'), h('span', {}, a.name))));
+      thumbEl(a.thumbnail, 'thumb round', a.name || a.title), h('span', {}, a.name))));
 
   const picks = discSection('Picked for you', 'Songs that fit everything you like');
   const because = h('div', {});
@@ -161,7 +161,7 @@ function renderDiscoverOnboarding(body, head) {
         b.setAttribute('aria-pressed', String(on));
         done.disabled = !chosen.size;
         done.textContent = chosen.size ? `Show my picks (${chosen.size})` : 'Show my picks';
-      } }, thumbEl(a.thumbnail, 'thumb round'), h('span', {}, a.name), h('span', { class: 'disc-pick-check', html: icon('check') }));
+      } }, thumbEl(a.thumbnail, 'thumb round', a.name || a.title), h('span', {}, a.name), h('span', { class: 'disc-pick-check', html: icon('check') }));
       return b;
     }));
   })();

@@ -54,10 +54,14 @@ body.mobile #lib-collapse { pointer-events: none; }
 body.mobile .queue {
   position: fixed !important; inset: var(--safe-t) 0 calc(var(--mini-h) + var(--mnav-h) + var(--safe-b)) 0 !important; width: auto !important; z-index: 45;
   margin: 0 !important; border-radius: 0 !important; display: flex !important;
-  transform: translateY(100%); transition: transform .28s var(--ease-out, ease);
+  /* Closed: all the way below the screen (its own height plus the mini
+     player and tabs it sits above), not peeking out over them. */
+  transform: translateY(calc(100% + var(--mini-h) + var(--mnav-h) + var(--safe-b) + 8px)); transition: transform .28s var(--ease-out, ease), visibility 0s .28s; visibility: hidden;
   background: var(--panel-solid, #0d0d0d) !important;
 }
-body.mobile .app:not(.queue-hidden) .queue, body.mobile .app.queue-open .queue { transform: none; }
+body.mobile .app:not(.queue-hidden) .queue, body.mobile .app.queue-open .queue { transform: none; visibility: visible; transition: transform .28s var(--ease-out, ease); }
+/* The mini player and the tabs stay on top of the sheets. */
+body.mobile .player-bar, body.mobile .mobile-nav { position: relative; z-index: 50; }
 body.mobile .jam-side { position: fixed !important; inset: var(--safe-t) 0 0 0 !important; width: auto !important; z-index: 46; margin: 0 !important; border-radius: 0 !important; }
 
 /* ---- mini player ----------------------------------------------------------- */
@@ -84,6 +88,31 @@ body.mobile .progress-row { position: absolute; left: 0; right: 0; top: -1px; he
 body.mobile .progress-row .time { display: none; }
 body.mobile .progress { height: 3px; margin: 0; }
 body.mobile .progress .knob-wrap, body.mobile .progress .hover-time { display: none; }
+
+/* ---- full player: the mini player grows while Now playing is open ---------- */
+body.mobile.np-full { --mini-h: 158px; }
+body.mobile.np-full .player-bar {
+  grid-template-columns: minmax(0, 1fr) !important; padding: 10px 18px 12px !important; align-items: stretch;
+  border-top: 0 !important; background: var(--panel-solid, #0d0d0d) !important;
+}
+body.mobile.np-full .player-bar .now { display: none !important; }
+body.mobile.np-full .transport { display: flex !important; flex-direction: column-reverse; justify-content: center; gap: 10px; width: 100%; }
+body.mobile.np-full .progress-row { position: static; height: auto; display: flex; align-items: center; gap: 10px; padding: 0; }
+body.mobile.np-full .progress-row .time { display: block; min-width: 38px; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+body.mobile.np-full .progress-row .time:last-child { text-align: right; }
+body.mobile.np-full .progress { flex: 1; height: 5px; border-radius: var(--r-pill); }
+body.mobile.np-full .progress .knob-wrap { display: block; }
+body.mobile.np-full .progress .knob { opacity: 1 !important; transform: scale(1) !important; }
+body.mobile.np-full .transport .buttons { justify-content: space-between; align-items: center; width: 100%; max-width: 400px; margin: 0 auto; padding: 0 4px; }
+body.mobile.np-full .progress .knob { width: 13px; height: 13px; }
+body.mobile.np-full #btn-shuffle, body.mobile.np-full #btn-repeat, body.mobile.np-full #btn-prev { display: grid; }
+body.mobile.np-full .transport .icon-btn { width: 48px; height: 48px; }
+body.mobile.np-full .transport .icon-btn svg.i { width: 24px; height: 24px; }
+body.mobile.np-full #btn-shuffle svg.i, body.mobile.np-full #btn-repeat svg.i { width: 21px; height: 21px; }
+body.mobile.np-full .transport .play-btn { width: 66px; height: 66px; }
+body.mobile.np-full .transport .play-btn svg.i { width: 28px; height: 28px; }
+/* Its title and cover are already big in the sheet above. */
+body.mobile.np-full .queue { bottom: calc(var(--mini-h) + var(--mnav-h) + var(--safe-b)) !important; }
 
 /* ---- bottom tabs ----------------------------------------------------------- */
 .mobile-nav { display: none; }

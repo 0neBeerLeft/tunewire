@@ -718,14 +718,26 @@ pub fn open(info: &StreamInfo) -> AppResult<OpenedStream> {
     if is_hls {
         open_hls(info)
     } else {
-        open_progressive(&info.url, &info.headers, info.filesize, info.ext.clone())
+        open_progressive_with(&info.url, &info.headers, info.filesize, info.ext.clone(), info.refresh.clone())
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)] // the integration tests (itests) use it
 pub fn open_progressive(url: &str, headers: &HashMap<String, String>, filesize: Option<u64>, hint: Option<String>) -> AppResult<OpenedStream> {
+    open_progressive_with(url, headers, filesize, hint, Default::default())
+}
+
+/// Whether `url` serves a file of exactly `total` bytes (a replacement link
+/// must be the same file, or the bytes wouldn't line up).
+fn same_file(url: &str, headers: &HashMap<String, String>, total: u64) -> bool {
+    validate_url(url).is_ok() && request(url, headers, Some((0, 0))).ok().and_then(|r| total_from_headers(&r)) == Some(total)
+}
+
+fn open_progressive_with(url: &str, headers: &HashMap<String, String>, filesize: Option<u64>, hint: Option<String>, refresh: crate::ytdlp::Refresher) -> AppResult<OpenedStream> {
     let shared = Shared::temp()?;
     let headers = headers.clone();
-    let url = url.to_string();
+    let mut url = url.to_string();
 
     let first = with_retry(None, || request(&url, &headers, Some((0, CHUNK - 1))))?;
     check_content_type(&first)?;
@@ -752,7 +764,19 @@ pub fn open_progressive(url: &str, headers: &HashMap<String, String>, filesize: 
 
     let total = total.unwrap();
     let s2 = shared.clone();
+    // A link that may stop early: fetch its replacement right away, so it's
+    // ready long before the first link runs out (no pause in the music).
+    let next: Arc<Mutex<Option<AppResult<String>>>> = Arc::new(Mutex::new(None));
+    if let Some(f) = refresh.0.clone() {
+        let n2 = next.clone();
+        std::thread::spawn(move || {
+            let r = f();
+            *n2.locked() = Some(r);
+        });
+    }
     std::thread::spawn(move || {
+        let mut swapped = refresh.0.is_none();
+        let mut refreshes = 0;
         let result = (|| -> AppResult<()> {
             // The first chunk is already on its way; if it breaks off, the
             // rest of it is fetched below like any other gap.
@@ -783,6 +807,17 @@ pub fn open_progressive(url: &str, headers: &HashMap<String, String>, filesize: 
                         },
                     }
                 };
+                // The replacement link is ready: use it for the rest.
+                if !swapped {
+                    if let Some(r) = next.locked().take() {
+                        swapped = true;
+                        match r {
+                            Ok(u) if same_file(&u, &headers, total) => url = u,
+                            Ok(_) => eprintln!("replacement stream link is a different file; keeping the first"),
+                            Err(e) => eprintln!("no replacement stream link: {e}"),
+                        }
+                    }
+                }
                 // Don't re-download bytes we already have.
                 let end = {
                     let st = s2.state.locked();
@@ -822,6 +857,37 @@ pub fn open_progressive(url: &str, headers: &HashMap<String, String>, filesize: 
                         chunk = (chunk * 2).min(MAX_CHUNK);
                     }
                     Err(AppError::Extraction(m)) if m.contains("range not satisfiable") => return Ok(()),
+                    // The link stopped working mid-song (cut off after the
+                    // first megabyte, or expired): get a new one for the
+                    // same file and carry on from here.
+                    Err(e @ (AppError::Unavailable(_) | AppError::Network(_))) if refresh.0.is_some() && refreshes < 2 => {
+                        refreshes += 1;
+                        let fresh = if swapped {
+                            (refresh.0.as_ref().unwrap())()
+                        } else {
+                            // Still being fetched: wait for it (up to 30 s).
+                            swapped = true;
+                            let mut waited = 0;
+                            loop {
+                                if let Some(r) = next.locked().take() {
+                                    break r;
+                                }
+                                if s2.cancelled() {
+                                    return Err(AppError::Cancelled);
+                                }
+                                if waited >= 300 {
+                                    break Err(e);
+                                }
+                                std::thread::sleep(Duration::from_millis(100));
+                                waited += 1;
+                            }
+                        };
+                        match fresh {
+                            Ok(u) if same_file(&u, &headers, total) => url = u,
+                            Ok(_) => return Err(AppError::Network("the new link for this song is a different file".into())),
+                            Err(e) => return Err(e),
+                        }
+                    }
                     Err(e) => return Err(e),
                 }
             }
@@ -883,7 +949,7 @@ fn fetch_text(url: &str, headers: &HashMap<String, String>) -> AppResult<String>
 fn fetch_segment(s: &Shared, u: &str, headers: &HashMap<String, String>) -> AppResult<u64> {
     let mark = s.state.locked().seq_len();
     with_retry(Some(s), || {
-        let resp = request(u, headers, None)?;
+        let mut resp = request(u, headers, None)?;
         check_content_type(&resp)?;
         // Restart at `mark` on retry; later bytes are simply overwritten.
         let mut st = s.state.locked();
@@ -892,8 +958,41 @@ fn fetch_segment(s: &Shared, u: &str, headers: &HashMap<String, String>) -> AppR
             r.1 = r.1.min(mark);
         }
         drop(st);
-        write_body(resp, s, mark, false, 0)
+        // Segments are small (a few seconds of audio): read each whole, so
+        // a tag in front of it can be dropped before it's appended.
+        let body = resp.body_mut().with_config().limit(64 * 1024 * 1024).read_to_vec().map_err(|e| AppError::Network(e.to_string()))?;
+        if s.cancelled() {
+            return Err(AppError::Cancelled);
+        }
+        let audio = strip_id3(&body);
+        s.write_at(mark, audio)?;
+        Ok(audio.len() as u64)
     })
+}
+
+/// A segment's audio without the ID3 tag in front of it. "Packed audio" HLS
+/// (YouTube's AAC formats) starts every segment with one (a timestamp); in
+/// the joined stream they'd sit between audio frames and break decoding.
+fn strip_id3(seg: &[u8]) -> &[u8] {
+    let mut rest = seg;
+    while rest.len() >= 10 && &rest[..3] == b"ID3" {
+        // Size: 4 bytes, 7 bits each ("syncsafe"); +10 header, +10 footer if flagged.
+        let size = rest[6..10].iter().fold(0usize, |n, b| (n << 7) | usize::from(b & 0x7f));
+        let footer = if rest[5] & 0x10 != 0 { 10 } else { 0 };
+        let len = 10 + size + footer;
+        if len > rest.len() {
+            break;
+        }
+        rest = &rest[len..];
+    }
+    rest
+}
+
+/// Whether the stream holds raw AAC frames (ADTS) at `at` (packed-audio HLS).
+fn adts_at(s: &Shared, at: u64) -> bool {
+    let mut b = [0u8; 2];
+    let mut f = s.file.locked();
+    f.seek(SeekFrom::Start(at)).is_ok() && f.read_exact(&mut b).is_ok() && b[0] == 0xff && b[1] & 0xf6 == 0xf0
 }
 
 fn open_hls(info: &StreamInfo) -> AppResult<OpenedStream> {
@@ -954,6 +1053,7 @@ fn open_hls(info: &StreamInfo) -> AppResult<OpenedStream> {
     }
     let init_len = shared.state.locked().seq_len();
     let first_end = init_len + fetch_segment(&shared, &segments[0], &headers)?;
+    let hint = if adts_at(&shared, init_len) { Some("aac".to_string()) } else { info.ext.clone().or(Some("mp4".into())) };
     let mut segs = vec![None; segments.len()];
     segs[0] = Some((init_len, first_end));
     let map = Arc::new(Mutex::new(HlsMap { init_len, segs, want: None }));
@@ -1009,7 +1109,22 @@ fn open_hls(info: &StreamInfo) -> AppResult<OpenedStream> {
     });
 
     let index = HlsIndex { starts, map, total_duration: t };
-    Ok(OpenedStream { reader: index.reader_from(&shared, 0), shared, hint: info.ext.clone().or(Some("mp4".into())), hls: Some(index) })
+    Ok(OpenedStream { reader: index.reader_from(&shared, 0), shared, hint, hls: Some(index) })
+}
+
+#[cfg(test)]
+mod id3_tests {
+    #[test]
+    fn strips_the_tag_in_front_of_a_segment() {
+        let mut seg = b"ID3\x04\x00\x00\x00\x00\x00\x05".to_vec();
+        seg.extend_from_slice(b"PRIV!");
+        seg.extend_from_slice(&[0xff, 0xf1, 0x50, 0x80]);
+        assert_eq!(super::strip_id3(&seg), &[0xff, 0xf1, 0x50, 0x80]);
+        assert_eq!(super::strip_id3(&[0xff, 0xf1]), &[0xff, 0xf1]);
+        // A broken size never cuts into (or past) the data.
+        let bad = b"ID3\x04\x00\x00\x7f\x7f\x7f\x7f".to_vec();
+        assert_eq!(super::strip_id3(&bad), &bad[..]);
+    }
 }
 
 #[cfg(test)]

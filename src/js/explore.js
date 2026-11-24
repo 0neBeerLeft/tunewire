@@ -23,7 +23,7 @@ async function renderCharts(country) {
     charts = await call('get_charts', { country: current });
     if (state.settings) state.settings.charts_country = current;
   } catch (e) {
-    if (seq === chartsSeq) body.replaceChildren(head, h('div', { class: 'empty' }, h('p', {}, errMsg(e)), h('button', { class: 'btn', onclick: () => renderCharts(current) }, 'Try again')));
+    if (seq === chartsSeq) body.replaceChildren(head, h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e)), h('button', { class: 'btn', onclick: () => renderCharts(current) }, 'Try again')));
     return;
   }
   if (seq !== chartsSeq) return;
@@ -38,7 +38,7 @@ async function renderCharts(country) {
   const artists = charts.artists.length ? h('div', { class: 'artist-section' },
     h('div', { class: 'section-title' }, 'Top artists'),
     h('div', { class: 'chart-artists' }, ...charts.artists.slice(0, 40).map((a) => h('button', { class: 'chart-artist', onclick: () => openArtist(a.name) },
-      h('span', { class: 'rank' }, String(a.rank)), thumbEl(a.thumbnail, 'thumb round'), h('span', { class: 'name' }, a.name))))) : null;
+      h('span', { class: 'rank' }, String(a.rank)), thumbEl(a.thumbnail, 'thumb round', a.name || a.title), h('span', { class: 'name' }, a.name))))) : null;
   body.replaceChildren(head, ...sections, artists);
 }
 
@@ -102,7 +102,7 @@ async function renderReleases(force = false) {
   try {
     feed = await call('new_releases', { force });
   } catch (e) {
-    if (seq === releasesSeq) body.replaceChildren(head, chips, h('div', { class: 'empty' }, h('p', {}, errMsg(e))));
+    if (seq === releasesSeq) body.replaceChildren(head, chips, h('div', { class: 'empty is-error' }, h('p', {}, errMsg(e))));
     return;
   }
   if (seq !== releasesSeq) return;
@@ -541,7 +541,7 @@ async function syncPlaylist(id, btn) {
   else toast('Syncing…', 'info', 1500);
   try {
     const n = await call('sync_playlist', { id });
-    toast(`Synced: ${n} songs`, 'ok');
+    toast(`Synced: ${songCount(n)}`, 'ok');
   } catch (e) { toast(errMsg(e), 'error'); }
   if (btn) { btn.disabled = false; btn.innerHTML = `${icon('refresh')}Sync`; }
 }

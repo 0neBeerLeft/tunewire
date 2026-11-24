@@ -6,6 +6,8 @@
   if (window.__TAURI__ || window.__TAURI_INTERNALS__) return;
 
   const DEMO = !!new URLSearchParams(location.search).get('demo');
+  // ?firstrun: a fresh install, signed out: shows the "Welcome to Tunewire" slides.
+  const FIRST = new URLSearchParams(location.search).has('firstrun');
   const hues = [[265, 320], [190, 240], [20, 340], [150, 200], [280, 210], [40, 10], [330, 280]];
   const art = (i) => {
     const [a, b] = hues[i % hues.length];
@@ -50,6 +52,7 @@
     normalize: true, crossfade: 0, lyrics: true, local_folders: ['/home/you/Music'], downloads_dir: '', ytdlp_source: 'system',
     auto_update: false, discord_rpc: false, discord_client_id: '', discord_buttons: true, repeat: 'off', example_plugin_installed: true,
     autoplay: true, eq_enabled: false, eq_gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], output_device: '', cover_accent: false, cover_colors: false, charts_country: 'ZZ', search_history: ['daft punk', 'tame impala'], background: 'art', background_strength: 45, glass_transparency: 58, background_image: '',
+    privacy_asked: true, signin_intro_shown: !FIRST, cloud_privacy_asked: true, sync_asked: true,
   };
   const mix = (id, kind, title, subtitle, ts) => ({ id, kind, title, subtitle, covers: ts.map((t) => t.thumbnail).filter(Boolean).slice(0, 4), tracks: ts });
   const forYou = (stale) => ({
@@ -448,12 +451,15 @@
       };
     },
     ytm_artist: async ({ name }) => ({
-      name: name || 'Daft Punk', browse_id: 'UCdaft', banner: yt('fa5IWHDbftI'), thumbnail: yt('fa5IWHDbftI'), audience: '30M monthly audience', subscribers: '9M', description: N('French electronic duo.', 'Dream-pop duo from a city that never sleeps.'),
+      name: name || 'Daft Punk', browse_id: 'UCdaft', banner: yt('fa5IWHDbftI'), thumbnail: art(0), audience: '30M monthly audience', subscribers: '9M', description: N('Daft Punk were a French electronic music duo formed in 1993 in Paris by Thomas Bangalter and Guy-Manuel de Homem-Christo. They achieved popularity in the late 1990s as part of the French house movement, combining house with funk, disco, techno and rock.', 'Dream-pop duo from a city that never sleeps.'),
       top_songs: tracks.slice(0, 6), all_songs: 'VLPLall',
-      albums: ['Discovery', 'Homework'].map((t, i) => ({ kind: 'album', title: t, subtitle: `Album • ${2001 - i}`, browse_id: `MPREb_${i}`, thumbnail: yt('Qm9EpPeVrn8'), track: null })),
-      singles: [{ kind: 'single', title: 'Get Lucky', subtitle: 'Single • 2013', browse_id: 'MPREb_s', thumbnail: yt('5NV6Rdv1a3I'), track: null }],
-      related: [{ kind: 'artist', title: 'Justice', subtitle: '5M monthly audience', browse_id: 'UCjustice', thumbnail: null, track: null }],
-      shelves: [],
+      albums: ['Random Access Memories', 'Human After All', 'Discovery', 'Homework', 'Alive 2007'].map((t, i) => ({ kind: 'album', title: t, subtitle: `Album • ${[2013, 2005, 2001, 1997, 2007][i]}`, browse_id: `MPREb_${i}`, thumbnail: art(i + 1), track: null })),
+      singles: ['Get Lucky', 'Lose Yourself to Dance', 'Instant Crush', 'Technologic'].map((t, i) => ({ kind: 'single', title: t, subtitle: `Single • ${[2013, 2013, 2013, 2005][i]}`, browse_id: `MPREb_s${i}`, thumbnail: art(i + 4), track: null })),
+      related: ['Justice', 'Cassius', 'Air', 'Kavinsky', 'Breakbot', 'Phoenix', 'Chromeo'].map((n, i) => ({ kind: 'artist', title: n, subtitle: `${5 - (i % 4)}M monthly audience`, browse_id: `UCrel${i}`, thumbnail: art(i + 2), track: null })),
+      shelves: [
+        { title: 'Videos', cards: ['Get Lucky (Official Video)', 'Instant Crush ft. Julian Casablancas', 'One More Time', 'Around the World', 'Harder, Better, Faster, Stronger'].map((t, i) => ({ kind: 'video', title: t, subtitle: `Daft Punk • ${[812, 403, 290, 151, 96][i]}M views`, browse_id: null, video_id: `v${i}`, thumbnail: yt(['5NV6Rdv1a3I', 'a5uQMwRMHcs', 'FGBhQbmPwH8', 'LKYPYj2XX80', 'gAjR4_CbPpQ'][i]), track: tracks[i % tracks.length] })) },
+        { title: 'Featured on', cards: ['This Is Daft Punk', 'French House Essentials', 'Electronic Classics'].map((t, i) => ({ kind: 'playlist', title: t, subtitle: 'Playlist • YouTube Music', browse_id: `VLfeat${i}`, thumbnail: art(i + 5), track: null })) },
+      ],
     }),
     ytm_collection: async ({ id }) => ({ title: id === 'VLPLall' ? 'All songs' : 'Discovery', kind: id?.startsWith('VL') ? 'Playlist' : 'Album', artist: 'Daft Punk', artist_browse: 'UCdaft', year: '2001', cover: yt('Qm9EpPeVrn8'), description: '', browse_id: id || 'MPREb_0', tracks: tracks.slice(0, 5) }),
     ytm_find_album: () => 'MPREb_0',
@@ -476,7 +482,7 @@
     },
     // Online: a test harness can point these at a local Supabase (window.__SB).
     cloud_config: () => (window.__SB ? { url: window.__SB.url, anon_key: window.__SB.anon } : ONLINE ? { url: SB_URL, anon_key: 'preview' } : null),
-    cloud_session: () => window.__SBsession || (ONLINE ? { ...online.session } : null),
+    cloud_session: () => window.__SBsession || (ONLINE && !FIRST ? { ...online.session } : null),
     cloud_sign_in: () => { throw { kind: 'unavailable', message: 'not in the preview' }; },
     cloud_sign_out: () => { window.__SBsession = null; },
     set_playlist_cloud: ({ id, cloudId, role }) => { const p = playlists.find((x) => x.id === id); p.cloud_id = cloudId; p.cloud_role = role; emit('library-changed', 'playlists'); },

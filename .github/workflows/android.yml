@@ -70,7 +70,7 @@ jobs:
       # the launcher icons (all densities, round and adaptive) with ours.
       - name: App icon
         run: |
-          npx tauri icon src-tauri/icons/icon.png
+          npx tauri icon src-tauri/icons/android-icon.svg
           ls src-tauri/gen/android/app/src/main/res/ | grep mipmap
           git checkout -- src-tauri/icons
 

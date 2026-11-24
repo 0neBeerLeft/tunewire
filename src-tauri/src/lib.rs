@@ -157,6 +157,8 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::DECORATIONS).build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_ytdlp_android::init());
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -166,6 +168,10 @@ pub fn run() {
             stream::set_cache_dir(cache.join("streams"));
             let store = Store::open(data.clone())?;
             secrets::set_dir(&data);
+            #[cfg(target_os = "android")]
+            if let Some(y) = app.try_state::<tauri_plugin_ytdlp_android::Ytdlp<tauri::Wry>>() {
+                ytdlp::set_android(y.inner().clone());
+            }
             localfiles::init(&data);
             spotify_play::init(data.clone());
 

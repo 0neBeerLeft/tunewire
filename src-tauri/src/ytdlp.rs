@@ -55,7 +55,34 @@ pub(crate) fn command() -> Command {
     cmd
 }
 
+/// Android runs yt-dlp through the ytdlp-android plugin (set at startup).
+#[cfg(target_os = "android")]
+static ANDROID: OnceLock<tauri_plugin_ytdlp_android::Ytdlp<tauri::Wry>> = OnceLock::new();
+
+#[cfg(target_os = "android")]
+pub fn set_android(handle: tauri_plugin_ytdlp_android::Ytdlp<tauri::Wry>) {
+    let _ = ANDROID.set(handle);
+}
+
 /// Run yt-dlp once with the given args, returning stdout.
+#[cfg(target_os = "android")]
+async fn run_once(args: &[String], timeout: Duration) -> AppResult<String> {
+    let _permit = semaphore().acquire().await.map_err(|_| AppError::Cancelled)?;
+    let handle = ANDROID.get().cloned().ok_or(AppError::YtDlpMissing)?;
+    let args = args.to_vec();
+    let job = tauri::async_runtime::spawn_blocking(move || handle.execute(&args));
+    let out = tokio::time::timeout(timeout, job).await.map_err(|_| AppError::Timeout("yt-dlp took too long to respond".into()))?
+        .map_err(|e| AppError::YtDlp(e.to_string()))?
+        .map_err(AppError::YtDlp)?;
+    if out.code == 0 || (!out.stdout.trim().is_empty() && out.stdout.trim_start().starts_with('{')) {
+        Ok(out.stdout)
+    } else {
+        Err(classify_ytdlp_stderr(&out.stderr))
+    }
+}
+
+/// Run yt-dlp once with the given args, returning stdout.
+#[cfg(not(target_os = "android"))]
 async fn run_once(args: &[String], timeout: Duration) -> AppResult<String> {
     let _permit = semaphore().acquire().await.map_err(|_| AppError::Cancelled)?;
     let child = command().args(args).spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { AppError::YtDlpMissing } else { AppError::YtDlp(e.to_string()) })?;

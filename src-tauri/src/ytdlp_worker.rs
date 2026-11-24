@@ -185,6 +185,13 @@ async fn start(binary: &str) -> Option<Worker> {
 
 /// Start the worker ahead of the first song (app launch), if it applies here.
 pub async fn warm(binary: String) {
+    // Android: no long-lived Python process; every run goes through the plugin.
+    #[cfg(target_os = "android")]
+    {
+        let _ = binary;
+        DISABLED.store(true, Ordering::SeqCst);
+        return;
+    }
     if DISABLED.load(Ordering::SeqCst) {
         return;
     }

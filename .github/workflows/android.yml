@@ -32,11 +32,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
-
+      # The runner already has the Android SDK; add the NDK and build tools.
       - name: Android SDK and NDK
         run: |
-          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          sm=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$sm" --licenses >/dev/null || true
+          "$sm" --install "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" >/dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
@@ -56,6 +57,15 @@ jobs:
 
       - name: Generate the Android project
         run: npx tauri android init --ci
+
+      # yt-dlp's Python runs from native libraries unpacked at install
+      # (youtubedl-android needs them extracted, not left inside the APK).
+      - name: Patch the Android project
+        run: |
+          f=src-tauri/gen/android/app/build.gradle.kts
+          echo '// yt-dlp (youtubedl-android) runs from extracted native libraries.' >> "$f"
+          echo 'android { packaging { jniLibs { useLegacyPackaging = true } } }' >> "$f"
+          tail -2 "$f"
 
       - name: Build the APK
         run: npx tauri android build --apk --target aarch64 --ci

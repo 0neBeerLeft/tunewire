@@ -6137,6 +6137,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-ytdlp-android"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
 name = "tauri-runtime"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6688,6 +6697,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "tauri-plugin-ytdlp-android",
  "thiserror 2.0.21",
  "tokio",
  "ureq",

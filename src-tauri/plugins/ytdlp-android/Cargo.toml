@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-ytdlp-android"
+version = "0.1.0"
+edition = "2021"
+description = "Runs yt-dlp on Android (youtubedl-android: bundled Python + yt-dlp)"
+links = "tauri-plugin-ytdlp-android"
+publish = false
+
+[dependencies]
+tauri = "2.12"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

@@ -50,6 +50,10 @@ getrandom = "0.2"
 open = "5"
 tauri-plugin-deep-link = "2"
 
+# Android runs yt-dlp through youtubedl-android (bundled Python + yt-dlp).
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-ytdlp-android = { path = "plugins/ytdlp-android" }
+
 # Desktop only: tray, window memory, self-update, one-instance, media keys and
 # the OS keychain. Android gets its own versions of these (or goes without).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

@@ -46,6 +46,7 @@ pub fn set_binary(path: &str) {
 
 pub(crate) fn command() -> Command {
     let mut cmd = Command::new(binary());
+    cmd.args(js_args());
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     #[cfg(windows)]
     {
@@ -135,7 +136,12 @@ pub async fn health_check() -> Health {
             // yt-dlp versions are dates (YYYY.MM.DD); warn when it is very old,
             // because site extractors break constantly.
             let year: i32 = version.split('.').next().and_then(|y| y.parse().ok()).unwrap_or(0);
-            let message = if year > 0 && year < 2025 { format!("yt-dlp {version} is outdated — run `yt-dlp -U` or update via your package manager.") } else { format!("yt-dlp {version} ready") };
+            let _ = year;
+            let message = if version_age_days(&version).is_some_and(|d| d > 60) {
+                format!("yt-dlp {version} is outdated (YouTube changes often) — run `yt-dlp -U`, update it via your package manager, or use Tunewire's own copy.")
+            } else {
+                format!("yt-dlp {version} ready")
+            };
             Health { ok: true, version: Some(version), message, path: binary() }
         }
         Err(e) => Health { ok: false, version: None, message: e.to_string(), path: binary() },
@@ -522,6 +528,180 @@ pub fn validate_url(u: &str) -> AppResult<()> {
 }
 
 // ---------------------------------------------------------------------------
+// JavaScript runtime: YouTube's player needs JavaScript to unlock its audio
+// links. yt-dlp runs it in Deno, Node or Bun (with its official solver
+// script); without one it gets fewer formats and fails more often.
+// ---------------------------------------------------------------------------
+
+static JS_RUNTIME: std::sync::Mutex<Option<Option<(String, String)>>> = std::sync::Mutex::new(None);
+static JS_DIR: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+
+/// Where a downloaded Deno lives (the app's bin folder). Set at startup.
+pub fn set_tools_dir(dir: &std::path::Path) {
+    *JS_DIR.locked() = Some(dir.to_path_buf());
+    *JS_RUNTIME.locked() = None;
+}
+
+fn deno_path(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join(if cfg!(windows) { "deno.exe" } else { "deno" })
+}
+
+fn on_path(name: &str) -> Option<String> {
+    let exe = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join(&exe)).find(|f| f.is_file())).map(|p| p.to_string_lossy().into_owned())
+}
+
+/// (runtime, path) for yt-dlp: our own Deno, else Deno/Node/Bun on PATH.
+pub fn js_runtime() -> Option<(String, String)> {
+    if let Some(found) = JS_RUNTIME.locked().clone() {
+        return found;
+    }
+    let own = JS_DIR.locked().as_ref().map(|d| deno_path(d)).filter(|p| p.is_file()).map(|p| ("deno".to_string(), p.to_string_lossy().into_owned()));
+    let found = own.or_else(|| ["deno", "node", "bun"].into_iter().find_map(|n| on_path(n).map(|p| (n.to_string(), p))));
+    *JS_RUNTIME.locked() = Some(found.clone());
+    found
+}
+
+/// Command-line arguments for the runtime (and yt-dlp's official solver
+/// script, fetched once if this yt-dlp build doesn't include it).
+pub fn js_args() -> Vec<String> {
+    match js_runtime() {
+        Some((name, path)) => vec!["--js-runtimes".into(), format!("{name}:{path}"), "--remote-components".into(), "ejs:github".into()],
+        None => Vec::new(),
+    }
+}
+
+/// The same for the long-lived worker (yt-dlp's Python options).
+pub fn js_options() -> Option<Value> {
+    js_runtime().map(|(name, path)| serde_json::json!({ "js_runtimes": { name: { "path": path } }, "remote_components": ["ejs:github"] }))
+}
+
+fn deno_asset() -> Option<&'static str> {
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        Some("deno-x86_64-pc-windows-msvc.zip")
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Some("deno-aarch64-apple-darwin.zip")
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        Some("deno-x86_64-apple-darwin.zip")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some("deno-x86_64-unknown-linux-gnu.zip")
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+        Some("deno-aarch64-unknown-linux-gnu.zip")
+    } else {
+        None
+    }
+}
+
+/// Download Deno (official release, SHA-256 checked) into `dir`, once, when
+/// there's no JavaScript runtime at all. Blocking (~40 MB).
+pub fn ensure_js_runtime(dir: &std::path::Path) -> AppResult<()> {
+    if js_runtime().is_some() {
+        return Ok(());
+    }
+    install_deno(dir)?;
+    *JS_RUNTIME.locked() = None;
+    Ok(())
+}
+
+/// Download, verify and unpack Deno into `dir` (no runtime check).
+fn install_deno(dir: &std::path::Path) -> AppResult<()> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let asset = deno_asset().ok_or_else(|| AppError::Unsupported("no Deno build for this platform".into()))?;
+    let base = "https://github.com/denoland/deno/releases/latest/download";
+    let agent = crate::http::agent();
+    let sums = agent
+        .get(&format!("{base}/{asset}.sha256sum"))
+        .config()
+        .http_status_as_error(true)
+        .build()
+        .call()
+        .map_err(|e| AppError::Network(e.to_string()))?
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| AppError::Network(e.to_string()))?;
+    let expected = sums
+        .split_whitespace()
+        .find(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
+        .map(str::to_lowercase)
+        .ok_or_else(|| AppError::Extraction("Deno checksum not found".into()))?;
+    let mut data = Vec::new();
+    agent
+        .get(&format!("{base}/{asset}"))
+        .config()
+        .http_status_as_error(true)
+        .timeout_recv_body(Some(Duration::from_secs(900)))
+        .build()
+        .call()
+        .map_err(|e| AppError::Network(e.to_string()))?
+        .into_body()
+        .into_reader()
+        .take(200 * 1024 * 1024)
+        .read_to_end(&mut data)
+        .map_err(|e| AppError::Network(e.to_string()))?;
+    let got = Sha256::digest(&data).iter().map(|b| format!("{b:02x}")).collect::<String>();
+    if got != expected {
+        return Err(AppError::Extraction("downloaded Deno failed checksum verification".into()));
+    }
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| AppError::Extraction(format!("Deno archive: {e}")))?;
+    let name = if cfg!(windows) { "deno.exe" } else { "deno" };
+    let mut entry = zip.by_name(name).map_err(|e| AppError::Extraction(format!("Deno archive: {e}")))?;
+    let mut bin = Vec::new();
+    entry.read_to_end(&mut bin)?;
+    std::fs::create_dir_all(dir)?;
+    let path = deno_path(dir);
+    let tmp = path.with_extension("download");
+    std::fs::write(&tmp, &bin)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    }
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// Days since a yt-dlp version (versions are release dates: 2026.11.20).
+pub fn version_age_days(version: &str) -> Option<i64> {
+    let mut p = version.trim().split('.').map(|x| x.parse::<u32>().ok());
+    let (y, m, d) = (p.next()??, p.next()??, p.next()??);
+    let date = chrono::NaiveDate::from_ymd_opt(i32::try_from(y).ok()?, m, d)?;
+    Some((chrono::Local::now().date_naive() - date).num_days())
+}
+
+/// Once a day: update Tunewire's own yt-dlp copy to the latest release.
+/// Blocking; true when it was replaced (the worker should restart).
+pub fn daily_update(dir: &std::path::Path) -> bool {
+    let stamp = dir.join(".last-update-check");
+    let recent = std::fs::metadata(&stamp).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|e| e < Duration::from_secs(20 * 3600));
+    if recent || !bundled_path(dir).is_file() {
+        return false;
+    }
+    let _ = std::fs::write(&stamp, b"");
+    let latest = crate::http::agent()
+        .get("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", crate::http::USER_AGENT)
+        .call()
+        .ok()
+        .and_then(|mut r| r.body_mut().read_to_string().ok())
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.get("tag_name").and_then(Value::as_str).map(str::to_string));
+    let mut cmd = std::process::Command::new(bundled_path(dir));
+    cmd.arg("--version").stdin(Stdio::null()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let installed = cmd.output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    match (latest, installed) {
+        (Some(l), Some(i)) if !l.is_empty() && l != i => install_bundled(dir).is_ok(),
+        _ => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Bundled copy: official build from GitHub, checksum-verified. On Linux and
 // macOS with Python 3.10+ that's the zipapp (`yt-dlp`, ~3 MB), which the
 // long-lived worker can import (see ytdlp_worker); otherwise the standalone
@@ -639,4 +819,25 @@ pub fn install_bundled(dir: &std::path::Path) -> AppResult<std::path::PathBuf> {
     }
     std::fs::rename(&tmp, &path)?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    #[test]
+    fn version_age() {
+        assert!(super::version_age_days("2020.01.01").unwrap() > 365);
+        assert_eq!(super::version_age_days("nightly"), None);
+    }
+
+    /// Run by hand: Deno downloads, passes its checksum and unpacks (not run).
+    #[test]
+    #[ignore]
+    fn live_deno_download() {
+        let dir = std::env::temp_dir().join("tunewire-deno-test");
+        super::install_deno(&dir).expect("deno");
+        let size = std::fs::metadata(super::deno_path(&dir)).unwrap().len();
+        println!("deno unpacked: {} MB", size / 1_048_576);
+        assert!(size > 20 * 1_048_576);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

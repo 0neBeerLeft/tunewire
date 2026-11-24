@@ -236,6 +236,12 @@ pub async fn extract(binary: &str, url: &str, opts: Value) -> AppResult<Option<V
             *guard = None;
             return Ok(None);
         }
+        let mut opts = opts;
+        if let (Some(o), Some(js)) = (opts.as_object_mut(), crate::ytdlp::js_options()) {
+            for (k, v) in js.as_object().into_iter().flatten() {
+                o.insert(k.clone(), v.clone());
+            }
+        }
         let line = serde_json::json!({ "id": id, "url": url, "opts": opts }).to_string() + "\n";
         let w = guard.as_mut().unwrap();
         if w.stdin.write_all(line.as_bytes()).await.is_err() || w.stdin.flush().await.is_err() {

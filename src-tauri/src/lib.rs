@@ -253,13 +253,24 @@ pub fn run() {
                 }
             });
             // Python + yt_dlp import take ~0.5 s; pay it now, not on the first song.
+            ytdlp::set_tools_dir(&app.state::<AppState>().data_dir.join("bin"));
             let bin_dir = (settings.ytdlp_source == "bundled").then(|| app.state::<AppState>().data_dir.join("bin"));
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
                 // A bundled standalone yt-dlp from an older version: switch to
                 // the zipapp when Python can run it (the worker needs it).
                 if let Some(dir) = bin_dir {
-                    if tauri::async_runtime::spawn_blocking(move || ytdlp::upgrade_bundled(&dir)).await.unwrap_or(false) {
+                    // Older standalone copy -> zipapp; then today's yt-dlp (YouTube
+                    // changes often) and a JavaScript runtime if there's none.
+                    let replaced = tauri::async_runtime::spawn_blocking(move || {
+                        let a = ytdlp::upgrade_bundled(&dir);
+                        let b = ytdlp::daily_update(&dir);
+                        let c = ytdlp::js_runtime().is_none() && ytdlp::ensure_js_runtime(&dir).is_ok();
+                        a || b || c
+                    })
+                    .await
+                    .unwrap_or(false);
+                    if replaced {
                         ytdlp_worker::reset().await;
                     }
                 }

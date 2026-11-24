@@ -74,6 +74,7 @@ mod perfbench;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::{Arc, Mutex};
 
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -129,9 +130,11 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg_attr(mobile, allow(dead_code))]
 pub(crate) fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
+        #[cfg(desktop)]
         let _ = w.unminimize();
         let _ = w.set_focus();
     }

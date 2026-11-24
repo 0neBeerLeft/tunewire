@@ -158,3 +158,13 @@ body.mobile .app .lib-nav .nav-item span, body.mobile .app .lib-item > :not(.lib
 body.mobile .lib-item { grid-template-columns: 48px minmax(0, 1fr) !important; justify-content: stretch !important; }
 body.mobile .nav-item { justify-content: flex-start !important; padding: 0 12px !important; }
 body.mobile .hero-art { width: 160px !important; height: 160px !important; }
+
+/* Search results never wider than the screen (long titles, the "Video" tag). */
+body.mobile .search-top, body.mobile .search-top > *, body.mobile .top-card, body.mobile .top-songs { min-width: 0; max-width: 100%; }
+body.mobile .top-card { overflow: hidden; }
+body.mobile .top-card .tc-sub { min-width: 0; flex-wrap: wrap; }
+body.mobile #view-search { overflow-x: hidden; }
+body.mobile .top-card { flex-wrap: wrap; gap: 12px 16px; padding: 16px; }
+body.mobile .top-card .tc-art { flex: none; width: 72px; height: 72px; }
+body.mobile .top-card .tc-title { flex: 1 1 150px; min-width: 0; font-size: 24px; }
+body.mobile .top-card .tc-sub { flex: 1 1 100%; }

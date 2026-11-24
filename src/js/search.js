@@ -62,6 +62,9 @@ async function doSearch(q, { push = true } = {}) {
   if (handleShareLink(q)) { $('#search-input').value = ''; syncSearchClear(); return; }
   showView('search', { push, reopen: () => { $('#search-input').value = q; syncSearchClear(); doSearch(q, { push: false }); } });
   showSearchBody(true);
+  // Phones: searching puts the keyboard and the suggestions away, so the
+  // results get the whole screen.
+  if (document.body.classList.contains('mobile')) { $('#search-input').blur(); closeSuggest?.(); }
   state.sort = null;
   srch.q = q;
   srch.extras = null;

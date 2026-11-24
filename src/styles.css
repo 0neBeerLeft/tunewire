@@ -1248,7 +1248,7 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
   .queue { top: var(--titlebar-h); bottom: var(--player-h); right: var(--gap); border-radius: var(--panel-radius); }
   .table-head, .track, .track.has-added, .table-head.has-added { grid-template-columns: 34px minmax(200px, 3fr) minmax(110px, 2fr) 40px 56px 36px; }
   .track .t-added, .table-head .c-added { display: none; }
-  .search-top { grid-template-columns: 1fr; }
+  .search-top { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
   :root { --sidebar-w: 72px; --player-h: 112px; }
@@ -1351,7 +1351,7 @@ body.dragging-tracks .track:hover { background: transparent; }
 .search-top { grid-template-columns: minmax(260px, 1fr) minmax(340px, 1.5fr); }
 .top-songs .track { grid-template-columns: 28px minmax(0, 1fr) 52px 32px; gap: 10px; padding: 0 10px; }
 .top-songs .t-like { display: none; }
-@media (max-width: 1380px) { .search-top { grid-template-columns: 1fr; } .top-card { min-height: 0; flex-direction: row; align-items: center; } .top-card .tc-title { font-size: 28px; } }
+@media (max-width: 1380px) { .search-top { grid-template-columns: minmax(0, 1fr); } .top-card { min-height: 0; flex-direction: row; align-items: center; } .top-card .tc-title { font-size: 28px; } }
 
 /* ---- Lighter rendering: less GPU memory, no end-of-animation flicker ----
    The background is a tiny pre-blurred picture scaled up (no live blur),
@@ -1565,7 +1565,7 @@ body.dragging-tracks .track:hover { background: transparent; }
 }
 @media (max-width: 900px) {
   .edit-grid { grid-template-columns: 1fr; }
-  .search-top { grid-template-columns: 1fr; }
+  .search-top { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---- Profiles: Discord-style header ------------------------------------- */

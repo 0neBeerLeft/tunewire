@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tunewire · phone preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    background: #0b0b0d; color: #c9c9cf; font: 13px/1.4 system-ui, sans-serif;
+  }
+  .bar { display: flex; gap: 8px; align-items: center; padding: 14px; flex-wrap: wrap; justify-content: center; }
+  .bar select, .bar button, .bar label {
+    background: #1b1b20; color: inherit; border: 1px solid #2c2c33; border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  .bar button:hover, .bar select:hover { border-color: #45454f; }
+  .stage { flex: 1; display: grid; place-items: center; padding: 0 20px 24px; width: 100%; box-sizing: border-box; }
+  .phone {
+    position: relative; background: #000; border-radius: 44px; padding: 12px;
+    box-shadow: 0 0 0 2px #2a2a30, 0 30px 80px rgba(0,0,0,.6); transform-origin: top center;
+  }
+  .screen { position: relative; overflow: hidden; border-radius: 32px; background: #000; }
+  iframe { display: block; border: 0; width: 100%; height: 100%; }
+  .status, .gesture { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 5; }
+  .status {
+    top: 0; display: flex; justify-content: space-between; align-items: center;
+    padding: 0 22px; font: 600 13px system-ui; color: #fff; mix-blend-mode: difference;
+  }
+  .status .cam { width: 12px; height: 12px; border-radius: 50%; background: #111; box-shadow: 0 0 0 2px #000; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); mix-blend-mode: normal; }
+  .gesture { bottom: 0; display: grid; place-items: center; }
+  .gesture i { width: 110px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.75); mix-blend-mode: difference; }
+  .hint { color: #6b6b75; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <select id="device">
+    <option value="412x915">Pixel 8 · 412×915</option>
+    <option value="393x873">Pixel 7a · 393×873</option>
+    <option value="360x780">Small phone · 360×780</option>
+    <option value="430x932">Big phone · 430×932</option>
+  </select>
+  <label><input type="checkbox" id="firstrun" /> First run</label>
+  <label><input type="checkbox" id="fit" checked /> Fit window</label>
+  <button id="reload">Reload</button>
+  <button id="open">Open full tab</button>
+  <span class="hint">Edits in src/ reload by themselves.</span>
+</div>
+<div class="stage"><div class="phone" id="phone">
+  <div class="screen" id="screen">
+    <div class="status" id="status"><span id="clock">12:00</span><span class="cam"></span><span>▾ ▴ ▮</span></div>
+    <iframe id="app"></iframe>
+    <div class="gesture" id="gesture"><i></i></div>
+  </div>
+</div></div>
+<script>
+  // Android's bar sizes (dp); the real app gets them from system_insets.
+  const TOP = 28, BOTTOM = 18;
+  const $ = (id) => document.getElementById(id);
+  const saved = JSON.parse(localStorage.getItem('tw-phone') || '{}');
+  if (saved.device) $('device').value = saved.device;
+  $('firstrun').checked = !!saved.firstrun;
+  $('fit').checked = saved.fit !== false;
+
+  function src() { return '/?mobile' + ($('firstrun').checked ? '&firstrun' : ''); }
+  function size() {
+    const [w, h] = $('device').value.split('x').map(Number);
+    $('screen').style.width = w + 'px';
+    $('screen').style.height = h + 'px';
+    $('status').style.height = TOP + 'px';
+    $('gesture').style.height = BOTTOM + 'px';
+    const room = window.innerHeight - $('phone').offsetTop - 24;
+    const s = $('fit').checked ? Math.min(1, room / (h + 24)) : 1;
+    $('phone').style.transform = `scale(${s})`;
+    $('phone').style.marginBottom = `${(h + 24) * (s - 1)}px`;
+  }
+  function save() {
+    localStorage.setItem('tw-phone', JSON.stringify({ device: $('device').value, firstrun: $('firstrun').checked, fit: $('fit').checked }));
+  }
+  function load() { $('app').src = src(); }
+  // Same origin: give the page the status/nav bar room like on a phone.
+  $('app').addEventListener('load', () => {
+    try {
+      const st = $('app').contentDocument.body.style;
+      st.setProperty('--safe-t', TOP + 'px');
+      st.setProperty('--safe-b', BOTTOM + 'px');
+    } catch (_) {}
+  });
+  $('device').onchange = () => { save(); size(); };
+  $('fit').onchange = () => { save(); size(); };
+  $('firstrun').onchange = () => { save(); load(); };
+  $('reload').onclick = load;
+  $('open').onclick = () => window.open(src(), '_blank');
+  window.addEventListener('resize', size);
+  const tick = () => { const d = new Date(); $('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  tick(); setInterval(tick, 10000);
+  size(); load();
+</script>
+</body>
+</html>

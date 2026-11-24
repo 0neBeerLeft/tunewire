@@ -2,6 +2,7 @@
 """Dev server for the frontend.
 
     python3 scripts/devserver.py            # http://127.0.0.1:1420
+                                            # http://127.0.0.1:1420/phone  (Android layout)
 
 - Serves src/ with live reload: the page reloads itself ~1 s after any file
   in src/ changes (no rebuild needed).
@@ -74,6 +75,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/__mtime":
             return self._send(latest_mtime().encode(), "text/plain")
+        if path in ("/phone", "/phone.html"):
+            # The app in its Android layout, inside a phone frame.
+            return self._send((DEV / "phone.html").read_bytes(), "text/html; charset=utf-8")
         if path.startswith("/__dev/"):
             f = DEV / path[len("/__dev/"):]
             if f.is_file() and DEV in f.resolve().parents:

@@ -5,6 +5,12 @@ name: Android
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "CPU: aarch64 (phones) or x86_64 (the Android emulator on a PC, for testing)"
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
   push:
     branches: [android]
   workflow_call:
@@ -48,7 +54,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -78,7 +84,7 @@ jobs:
           tail -2 "$f"
 
       - name: Build the APK
-        run: npx tauri android build --apk --target aarch64 --ci
+        run: npx tauri android build --apk --target ${{ inputs.target || 'aarch64' }} --ci
 
       - name: Sign the APK
         env:
@@ -101,8 +107,9 @@ jobs:
           bt="$ANDROID_HOME/build-tools/35.0.0"
           "$bt/zipalign" -f -p 4 "$apk" aligned.apk
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          "$bt/apksigner" sign --ks ks.p12 --ks-pass "pass:$pass" --out "Tunewire_${version}_android-arm64.apk" aligned.apk
-          "$bt/apksigner" verify --print-certs "Tunewire_${version}_android-arm64.apk" | head -3
+          abi=arm64; [ "${{ inputs.target || 'aarch64' }}" = x86_64 ] && abi=x86_64-emulator-test
+          "$bt/apksigner" sign --ks ks.p12 --ks-pass "pass:$pass" --out "Tunewire_${version}_android-${abi}.apk" aligned.apk
+          "$bt/apksigner" verify --print-certs "Tunewire_${version}_android-${abi}.apk" | head -3
           rm -f ks.p12 aligned.apk
           ls -la Tunewire_*.apk
 

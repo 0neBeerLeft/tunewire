@@ -360,7 +360,7 @@ function paintHealth() {
   const pill = $('#health-bad');
   pill.hidden = !bad;
   if (bad) {
-    pill.textContent = 'yt-dlp missing';
+    pill.textContent = /Android/i.test(navigator.userAgent) ? 'Can’t play' : 'yt-dlp missing';
     pill.title = $('#health').title;
     pill.onclick = () => offerYtdlpInstall($('#health').title);
   }
@@ -368,6 +368,27 @@ function paintHealth() {
 
 /** Shown when yt-dlp isn't found: one click installs Tunewire's own copy. */
 function offerYtdlpInstall(message) {
+  // Android: yt-dlp is built into the app (there's nothing to download);
+  // it can only be started again.
+  if (/Android/i.test(navigator.userAgent)) {
+    const status = h('p', { class: 'muted small min-h-18' });
+    const retry = h('button', { class: 'btn primary' }, 'Try again');
+    const m = openModal({
+      title: 'Songs can’t play right now',
+      subtitle: message,
+      body: h('div', {}, h('p', {}, 'Tunewire’s built-in player (yt-dlp) didn’t start. Trying again usually fixes it; if not, close Tunewire completely and open it again.'), status),
+      footer: [h('button', { class: 'btn', onclick: () => m.close() }, 'Not now'), retry],
+    });
+    retry.addEventListener('click', async () => {
+      retry.disabled = true;
+      status.innerHTML = '<span class="spinner"></span> Starting yt-dlp…';
+      const health = await checkHealth().catch((e) => ({ ok: false, message: errMsg(e) }));
+      paintHealth();
+      if (health.ok) { m.close(); toast('Ready to play', 'ok', 2000); }
+      else { status.textContent = health.message; retry.disabled = false; }
+    });
+    return;
+  }
   const status = h('p', { class: 'muted small min-h-18' });
   const install = h('button', { class: 'btn primary' }, 'Install it for me');
   const m = openModal({

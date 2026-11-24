@@ -75,7 +75,7 @@ function askPrivacyFirstRun() {
   const m = openModal({
     title: 'Before you start',
     closable: false,
-    subtitle: 'Tunewire keeps your music and listening on this computer. One question:',
+    subtitle: 'Tunewire keeps your music and listening on this device. One question:',
     body: h('div', { class: 'privacy-list' },
       h('label', { class: 'setting' },
         h('div', { class: 'label' }, 'Send error reports', h('small', {}, 'When something breaks, send the developer the app version, operating system and the error, with your folder names and links removed. Nothing about your music is sent.')),

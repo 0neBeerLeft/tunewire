@@ -184,7 +184,7 @@ async function requireAccount({ why = 'Sign in to use this' } = {}) {
     });
     const m = openModal({
       title: why,
-      subtitle: 'Your listening stays on this computer, and your playlists too unless you choose to sync them to your other devices. An account is used for that, sharing, collaborative playlists, Listen Together and friends.',
+      subtitle: 'Your listening stays on this device, and your playlists too unless you choose to sync them to your other devices. An account is used for that, sharing, collaborative playlists, Listen Together and friends.',
       body: h('div', { class: 'import-box' }, btn, status),
       onClose: () => { if (!done) { call('cancel_sign_in').catch(() => {}); resolve(false); } },
     });
@@ -228,7 +228,7 @@ function showSignInIntro() {
     h('div', { class: 'si-slide' },
       h('div', { class: 'si-ico discord', html: plogo('discord') || icon('discord') }),
       h('h3', {}, 'Join the community'),
-      h('p', {}, 'One click with Discord: Tunewire gets your name and picture, nothing else. Your listening stays on this computer.'),
+      h('p', {}, 'One click with Discord: Tunewire gets your name and picture, nothing else. Your listening stays on this device.'),
       btn, status),
   ];
   const back = h('button', { class: 'btn', onclick: () => go(at - 1) }, 'Back');

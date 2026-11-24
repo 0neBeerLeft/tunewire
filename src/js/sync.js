@@ -401,7 +401,7 @@ async function handleGoneHere(gone) {
   if (gone.length > 3 && gone.length > total / 4) {
     if (syncs.askedGone) return;
     syncs.askedGone = true;
-    toast(`${gone.length} synced playlists are missing on this computer. They’re kept online.`, 'warn', 15000, { action: { label: 'Get them back', onClick: () => {
+    toast(`${gone.length} synced playlists are missing on this device. They’re kept online.`, 'warn', 15000, { action: { label: 'Get them back', onClick: () => {
       for (const [id] of gone) delete bases().pl[id];
       syncSave();
       syncs.askedGone = false;

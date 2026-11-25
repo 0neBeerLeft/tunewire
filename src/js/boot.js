@@ -138,7 +138,9 @@ async function boot() {
   refreshTools();
   checkHealth().then((health) => {
     paintHealth();
-    if (!health.ok) offerYtdlpInstall(health.message);
+    // Android plays YouTube without yt-dlp (it's only the fallback there):
+    // no alarm at startup; a song that really fails says so itself.
+    if (!health.ok && !/Android/i.test(navigator.userAgent)) offerYtdlpInstall(health.message);
     else if (/outdated/.test(health.message)) toast(health.message, 'warn', 10000);
   });
 

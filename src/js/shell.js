@@ -356,7 +356,8 @@ function paintFullscreen() {
 
 // Problems with yt-dlp show up as a red pill in the title bar (otherwise hidden).
 function paintHealth() {
-  const bad = $('#health').classList.contains('bad');
+  // Android: yt-dlp is only the fallback (see boot.js), so no red pill.
+  const bad = $('#health').classList.contains('bad') && !/Android/i.test(navigator.userAgent);
   const pill = $('#health-bad');
   pill.hidden = !bad;
   if (bad) {

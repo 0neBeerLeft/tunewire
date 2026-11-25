@@ -34,6 +34,9 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Tidier player bar, window buttons, empty and error screens, and rounder corners that match everywhere
 
 **Fixes**
+- Your Library's Recents order is the playlists you played last, first, and it's kept after a restart; opening a playlist no longer makes the list jump
+- The buttons in the player bar line up (every group is the same height)
+- Android: no more "Songs can't play right now" warning at startup when songs play fine
 - Settings → Tools → Clear cache frees the space used for cover images, song links and temporary song files (your library and settings stay)
 - Opening a share link (playlist, song, Listen together) asks once instead of twice
 

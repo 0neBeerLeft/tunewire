@@ -45,6 +45,19 @@ function coverArt(tracks, cls, custom) {
 
 // Sidebar ----------------------------------------------------------------------
 
+/** When each playlist was last played (Your Library's "Recents" order), kept
+ *  on this device across restarts. */
+const PLAYED_KEY = 'tw-pl-played';
+const playedAt = (() => {
+  try { return JSON.parse(localStorage.getItem(PLAYED_KEY)) || {}; } catch { return {}; }
+})();
+function markPlayed(id) {
+  playedAt[id] = Date.now();
+  // Forget playlists that no longer exist.
+  for (const k of Object.keys(playedAt)) if (!state.playlists.some((p) => p.id === k)) delete playedAt[k];
+  try { localStorage.setItem(PLAYED_KEY, JSON.stringify(playedAt)); } catch { /* full or blocked: order only lasts this session */ }
+}
+
 const LIB_SORTS = { recents: 'Recents', added: 'Recently added', alpha: 'Alphabetical', creator: 'Most songs' };
 const libFolders = new Set(JSON.parse((() => { try { return localStorage.getItem('tw-closed-folders') || '[]'; } catch { return '[]'; } })()));
 
@@ -108,7 +121,9 @@ function renderLibrary() {
     let pls = state.playlists.filter((p) => matches(p.name));
     if (f === 'downloaded') pls = pls.filter((p) => p.tracks.length && p.tracks.every((t) => state.downloadKeys.has(t.key)));
     const sorters = {
-      recents: (a, b) => (b.lastPlayed || b.updated) - (a.lastPlayed || a.updated),
+      // Last played first. Never by "last changed": opening a playlist can
+      // change it (a sync, a refreshed Spotify list) and it jumped to the top.
+      recents: (a, b) => (playedAt[b.id] || b.created || 0) - (playedAt[a.id] || a.created || 0),
       added: (a, b) => b.created - a.created,
       alpha: (a, b) => a.name.localeCompare(b.name),
       creator: (a, b) => b.tracks.length - a.tracks.length,
@@ -343,8 +358,7 @@ function stickyHeader(view, hero, title, onPlay, isMine = () => false) {
 /** Play a list and remember where it came from (Your Library highlights it). */
 function playCollection(tracks, start, from) {
   state.playingFrom = from || null;
-  const pl = state.playlists.find((p) => p.id === from);
-  if (pl) pl.lastPlayed = Date.now();
+  if (state.playlists.some((p) => p.id === from)) markPlayed(from);
   renderLibrary();
   return playList(tracks, start);
 }

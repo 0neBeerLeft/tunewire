@@ -2919,9 +2919,12 @@ body:has(#ambient.anim) .modal-backdrop { -webkit-backdrop-filter: none; backdro
 /* The right column is as wide as its buttons need (they never slide under
    the progress bar's times). */
 .player-bar { grid-template-columns: minmax(180px, 1fr) minmax(300px, 1.7fr) minmax(max-content, 1fr); }
-.sc-group { display: flex; align-items: center; gap: 0; padding: 2px; border-radius: var(--r-pill);
+/* Every pill in the player bar is 36 px tall (1 px border, 3 px around 28 px
+   buttons), so the groups and the Together pill line up and a lit button
+   sits inside its group with an even ring. */
+.sc-group { display: flex; align-items: center; gap: 2px; height: 36px; box-sizing: border-box; padding: 3px; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text) 4%, transparent); border: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
-.sc-group .icon-btn { width: 30px; height: 30px; min-width: 0; border-radius: 50%; }
+.sc-group .icon-btn { width: 28px; height: 28px; min-width: 0; min-height: 0; border-radius: 50%; }
 .sc-group .icon-btn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
 /* Active: a filled circle instead of a dot hanging under the button. */
 .sc-group .icon-btn.on { color: var(--text); background: color-mix(in srgb, var(--text) 14%, transparent); }
@@ -2930,7 +2933,7 @@ body:has(#ambient.anim) .modal-backdrop { -webkit-backdrop-filter: none; backdro
 .sc-group.vol input[type=range] { width: 76px; }
 .side-controls > #btn-full, .side-controls > #btn-more { width: 34px; height: 34px; border-radius: 50%; }
 .side-controls > #btn-full:hover, .side-controls > #btn-more:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
-.side-controls .jam-pill { height: 34px; padding: 0 11px 0 9px; }
+.side-controls .jam-pill { height: 36px; box-sizing: border-box; padding: 0 12px 0 10px; }
 @media (max-width: 1050px) {
   .sc-group.out { display: none; }
   .sc-group.vol input[type=range] { width: 72px; }

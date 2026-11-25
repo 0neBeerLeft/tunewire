@@ -525,8 +525,22 @@ fn bench_click() {
     let rt = rt();
     let _g = rt.enter();
     let ids = [
-        "dQw4w9WgXcQ", "fJ9rUzIMcZQ", "kJQP7kiw5Fk", "60ItHLz5WEA", "hTWKbfoikeg", "JGwWNGJdvx8", "OPf0YbXqDm0", "09R8_2nJtjg",
-        "4NRXx6U8ABQ", "YQHsXMglC9A", "CevxZvSJLk8", "RgKAFK5djSk", "pRpeEdMmmQ0", "lp-EO5I60KA", "2Vv-BfVoq4g", "nfWlot6h_JM",
+        "dQw4w9WgXcQ",
+        "fJ9rUzIMcZQ",
+        "kJQP7kiw5Fk",
+        "60ItHLz5WEA",
+        "hTWKbfoikeg",
+        "JGwWNGJdvx8",
+        "OPf0YbXqDm0",
+        "09R8_2nJtjg",
+        "4NRXx6U8ABQ",
+        "YQHsXMglC9A",
+        "CevxZvSJLk8",
+        "RgKAFK5djSk",
+        "pRpeEdMmmQ0",
+        "lp-EO5I60KA",
+        "2Vv-BfVoq4g",
+        "nfWlot6h_JM",
     ];
     // Startup work the app does once (visitor id; the worker where it runs).
     rt.block_on(crate::ytdlp_worker::warm(crate::ytdlp::binary()));

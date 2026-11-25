@@ -652,7 +652,6 @@ impl SearchCache {
         self.map.locked().clear();
     }
 
-
     fn get(&self, key: &str) -> Option<Vec<TrackVersion>> {
         let map = self.map.locked();
         map.get(key).filter(|(t, _)| t.elapsed() < CACHE_TTL).map(|(_, v)| v.clone())

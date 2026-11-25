@@ -62,8 +62,8 @@ mod stream;
 mod sync_ext;
 mod themes;
 mod ytdlp;
-mod ytfast;
 mod ytdlp_worker;
+mod ytfast;
 mod ytm;
 
 #[cfg(test)]

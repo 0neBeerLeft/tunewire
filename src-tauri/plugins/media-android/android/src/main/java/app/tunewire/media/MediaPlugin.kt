@@ -72,6 +72,20 @@ class MediaPlugin(private val activity: Activity) : Plugin(activity) {
      * gesture handle (bottom) cover, in CSS pixels. Android draws apps under
      * them (edge to edge), so the page leaves this much room.
      */
+    /** Empties the WebView's disk cache (cover images, page files). */
+    @Command
+    fun clearWebCache(invoke: Invoke) {
+        activity.runOnUiThread {
+            try {
+                // The cache is shared by every WebView of the app.
+                android.webkit.WebView(activity).apply { clearCache(true); destroy() }
+                invoke.resolve()
+            } catch (e: Exception) {
+                invoke.reject(e.message ?: "couldn't clear the cache")
+            }
+        }
+    }
+
     @Command
     fun insets(invoke: Invoke) {
         activity.runOnUiThread {

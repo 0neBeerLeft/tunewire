@@ -104,6 +104,14 @@ mod imp {
         (0.0, 0.0)
     }
 
+    /// Empty the WebView's disk cache (Android: through the plugin).
+    pub fn clear_web_cache() {
+        #[cfg(target_os = "android")]
+        if let Some(h) = HANDLE.get() {
+            let _ = h.clear_web_cache();
+        }
+    }
+
     /// Open a web link in the browser (Android: through the plugin).
     pub fn open_url(url: &str) -> Result<(), String> {
         #[cfg(target_os = "android")]

@@ -35,6 +35,21 @@ pub fn set_cache_dir(dir: PathBuf) {
     let _ = CACHE_DIR.set(dir);
 }
 
+/// Settings → Clear cache: the playlists fetched ahead, and the temporary
+/// files of songs that are no longer open (an open one can't be removed on
+/// Windows, and stays readable elsewhere). Returns the bytes removed.
+pub fn clear_caches() -> u64 {
+    *PLAYLISTS.locked() = None;
+    let mut freed = 0;
+    for e in std::fs::read_dir(cache_dir()).into_iter().flatten().flatten() {
+        let len = e.metadata().map(|m| m.len()).unwrap_or(0);
+        if std::fs::remove_file(e.path()).is_ok() {
+            freed += len;
+        }
+    }
+    freed
+}
+
 /// Made again if something removed it (a cache cleaner, or another test).
 fn cache_dir() -> PathBuf {
     let d = CACHE_DIR.get().cloned().unwrap_or_else(|| std::env::temp_dir().join("tunewire-stream-cache"));
@@ -701,7 +716,12 @@ fn total_from_headers(resp: &ureq::http::Response<ureq::Body>) -> Option<u64> {
 /// Fetch one byte of a prefetched stream so the TLS connection to its server
 /// is already open (pooled) when the song is actually played.
 pub fn warm_connection(info: &StreamInfo) {
-    if validate_url(&info.url).is_err() || info.protocol.as_deref().map(|p| p.contains("m3u8")).unwrap_or(false) {
+    if validate_url(&info.url).is_err() {
+        return;
+    }
+    // HLS: the playlist itself (YouTube takes ~0.25 s to build one).
+    if info.protocol.as_deref().map(|p| p.contains("m3u8")).unwrap_or(false) || info.url.contains(".m3u8") {
+        let _ = playlist(&info.url, &info.headers);
         return;
     }
     if let Ok(resp) = request(&info.url, &info.headers, Some((0, 0))) {
@@ -995,10 +1015,40 @@ fn adts_at(s: &Shared, at: u64) -> bool {
     f.seek(SeekFrom::Start(at)).is_ok() && f.read_exact(&mut b).is_ok() && b[0] == 0xff && b[1] & 0xf6 == 0xf0
 }
 
+/// HLS playlists by URL, fetched ahead of a click (see `warm_connection`).
+/// A click while one is still on its way waits for it instead of asking again.
+type PlaylistSlot = Arc<Mutex<Option<(std::time::Instant, String)>>>;
+static PLAYLISTS: Mutex<Option<HashMap<String, PlaylistSlot>>> = Mutex::new(None);
+/// Well inside the links' own lifetime (YouTube: ~6 h).
+const PLAYLIST_TTL: Duration = Duration::from_secs(20 * 60);
+
+fn playlist(url: &str, headers: &HashMap<String, String>) -> AppResult<String> {
+    let slot = {
+        let mut g = PLAYLISTS.locked();
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() >= 40 {
+            // Drop the old ones nobody is fetching or reading right now.
+            m.retain(|_, s| Arc::strong_count(s) > 1 || s.try_lock().map(|v| v.as_ref().is_some_and(|(t, _)| t.elapsed() < PLAYLIST_TTL)).unwrap_or(true));
+        }
+        m.entry(url.to_string()).or_default().clone()
+    };
+    let mut have = slot.locked();
+    if let Some((t, text)) = have.as_ref() {
+        if t.elapsed() < PLAYLIST_TTL {
+            return Ok(text.clone());
+        }
+    }
+    let text = fetch_text(url, headers)?;
+    if text.starts_with("#EXTM3U") {
+        *have = Some((std::time::Instant::now(), text.clone()));
+    }
+    Ok(text)
+}
+
 fn open_hls(info: &StreamInfo) -> AppResult<OpenedStream> {
     let headers = info.headers.clone();
     let mut url = info.url.clone();
-    let mut text = fetch_text(&url, &headers)?;
+    let mut text = playlist(&url, &headers)?;
     if !text.starts_with("#EXTM3U") {
         return Err(AppError::Extraction("invalid HLS playlist".into()));
     }

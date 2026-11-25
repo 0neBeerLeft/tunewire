@@ -189,8 +189,28 @@ function renderSettings() {
       updateSettingsRow(),
       settingRow('yt-dlp', `${esc($('#health').title || '')}<br><code>${esc(state.ytdlpPath || '')}</code>`, recheck(checkHealth)),
       settingRow('yt-dlp copy', 'Use the yt-dlp installed on your system, or let Tunewire keep its own up-to-date copy (official build from GitHub, checksum-verified).', ytdlpControl()),
+      settingRow('Clear cache', 'Frees the space Tunewire uses to load things faster: saved song links, search results, cover images and temporary song files. Your library, playlists, history and settings stay. Things load a little slower once afterwards.', clearCacheButton()),
       settingRow('Keyboard shortcuts', null, h('button', { class: 'btn small', onclick: showShortcuts }, 'Show'))));
   body.prepend(settingsNav(body));
+}
+
+function clearCacheButton() {
+  const btn = h('button', { class: 'btn small' }, 'Clear');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Clearing…';
+    try {
+      const bytes = await call('clear_cache');
+      const mb = bytes / (1024 * 1024);
+      toast(mb >= 1 ? `Cache cleared: ${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB freed` : 'Cache cleared');
+    } catch (e) {
+      toast(`Couldn't clear the cache: ${errMsg(e)}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Clear';
+    }
+  };
+  return btn;
 }
 
 async function refreshTools() {

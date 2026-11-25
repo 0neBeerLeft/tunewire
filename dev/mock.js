@@ -396,6 +396,7 @@
     clear_queue: () => { queue.items = [queue.items[queue.current]]; queue.current = 0; emit('queue-changed', snap()); return snap(); },
     shuffle_queue: () => snap(),
     set_item_platform: () => null,
+    clear_cache: async () => { await new Promise((r) => setTimeout(r, 400)); return 131 * 1024 * 1024; },
     list_playlists: () => playlists,
     create_playlist: ({ name, tracks: ts }) => { const p = { id: `p${Date.now()}${++plSeq}`, name, tracks: ts || [], created: 0, updated: 0, added: {} }; playlists.push(p); emit('library-changed', 'playlists'); return p; },
     rename_playlist: ({ id, name }) => { playlists.find((p) => p.id === id).name = name; emit('library-changed', 'playlists'); },

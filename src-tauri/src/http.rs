@@ -8,6 +8,11 @@ use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, Defaul
 
 pub const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36";
 
+/// Open connections are kept this long between uses (ureq's default is
+/// 15 s): the next song then skips the TLS handshakes (~0.1 s each, two to
+/// four per song). Servers close idle ones sooner; callers retry once.
+const IDLE_AGE: Duration = Duration::from_secs(90);
+
 /// Statuses are returned (not turned into errors) so callers can map them.
 pub fn agent() -> &'static ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
@@ -17,6 +22,7 @@ pub fn agent() -> &'static ureq::Agent {
             .timeout_connect(Some(Duration::from_secs(10)))
             .timeout_recv_response(Some(Duration::from_secs(15)))
             .timeout_recv_body(Some(Duration::from_secs(30)))
+            .max_idle_age(IDLE_AGE)
             .build()
             .into()
     })
@@ -31,7 +37,13 @@ pub const STREAM_IDLE: Duration = Duration::from_secs(20);
 pub fn stream_agent() -> &'static ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT.get_or_init(|| {
-        let config = ureq::config::Config::builder().http_status_as_error(false).timeout_connect(Some(Duration::from_secs(10))).timeout_recv_response(Some(Duration::from_secs(15))).build();
+        let config = ureq::config::Config::builder()
+            .http_status_as_error(false)
+            .timeout_connect(Some(Duration::from_secs(10)))
+            .timeout_recv_response(Some(Duration::from_secs(15)))
+            .max_idle_age(IDLE_AGE)
+            .max_idle_connections_per_host(6)
+            .build();
         ureq::Agent::with_parts(config, IdleConnector(DefaultConnector::default()), PublicOnly::default())
     })
 }

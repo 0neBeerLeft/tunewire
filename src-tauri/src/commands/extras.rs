@@ -150,6 +150,66 @@ pub fn open_link(url: String) -> AppResult<()> {
     crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))
 }
 
+/// Bytes in a folder and everything under it.
+fn dir_size(p: &std::path::Path) -> u64 {
+    std::fs::read_dir(p)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() => dir_size(&e.path()),
+            _ => e.metadata().map(|m| m.len()).unwrap_or(0),
+        })
+        .sum()
+}
+
+/// Settings → Clear cache: everything the app keeps only to be faster
+/// (song links, search results, pages, temporary song files, the page's
+/// image cache). Nothing you made or saved: library, playlists, history,
+/// settings and song matches stay. Returns about how many bytes it freed.
+#[tauri::command]
+pub async fn clear_cache(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>) -> AppResult<u64> {
+    use tauri::Manager;
+    crate::ytdlp::clear_caches();
+    crate::ytm::clear_cache();
+    state.cache.clear();
+    let cache = app.path().app_cache_dir().ok();
+    let mut freed = blocking(|| Ok(crate::stream::clear_caches())).await?;
+    if let Some(dir) = &cache {
+        // Left over from an older version (a library that's no longer used).
+        let old = dir.join("rustypipe");
+        freed += dir_size(&old);
+        let _ = std::fs::remove_dir_all(old);
+    }
+    // The page's own disk cache (cover art mostly): measured before, as the
+    // browser empties it in the background.
+    #[cfg(windows)]
+    {
+        if let Some(dir) = &cache {
+            let d = dir.join("EBWebView").join("Default");
+            freed += dir_size(&d.join("Cache")) + dir_size(&d.join("Code Cache"));
+        }
+        let _ = window.with_webview(|pw| unsafe {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2Profile2, ICoreWebView2_13, COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE};
+            use windows_core::Interface;
+            let Ok(core) = pw.controller().CoreWebView2() else { return };
+            let Some(profile) = core.cast::<ICoreWebView2_13>().ok().and_then(|w| w.Profile().ok()).and_then(|p| p.cast::<ICoreWebView2Profile2>().ok()) else { return };
+            let done = webview2_com::ClearBrowsingDataCompletedHandler::create(Box::new(|_| Ok(())));
+            let _ = profile.ClearBrowsingData(COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE, &done);
+        });
+    }
+    #[cfg(target_os = "android")]
+    {
+        if let Some(dir) = &cache {
+            freed += dir_size(&dir.join("WebView"));
+        }
+        let _ = tauri::async_runtime::spawn_blocking(crate::media::clear_web_cache).await;
+    }
+    #[cfg(not(any(windows, target_os = "android")))]
+    let _ = &window;
+    Ok(freed)
+}
+
 /// How much the phone's status bar (top) and navigation bar (bottom) cover
 /// the page, in CSS pixels ({top: 0, bottom: 0} on desktop).
 #[tauri::command]

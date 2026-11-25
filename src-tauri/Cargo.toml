@@ -53,6 +53,12 @@ open = "5"
 tauri-plugin-deep-link = "2"
 
 # Android runs yt-dlp through youtubedl-android (bundled Python + yt-dlp).
+# Settings → Clear cache empties the page's disk cache (Tauri's own call
+# would also wipe its saved storage). The versions Tauri itself uses.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"
+
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-ytdlp-android = { path = "plugins/ytdlp-android" }
 tauri-plugin-media-android = { path = "plugins/media-android" }

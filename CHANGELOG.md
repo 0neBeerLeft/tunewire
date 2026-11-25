@@ -5,6 +5,13 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 ## Unreleased
 
+**Songs start much faster**
+- A YouTube song starts in about half a second instead of about 3 seconds: Tunewire now asks YouTube for the audio itself instead of starting yt-dlp for every song (yt-dlp stays as the fallback)
+- Songs that were prepared ahead (next in the queue, the one you hover, the top search result) start almost at once, in about 0.05 s
+- A Spotify song played for the first time starts in under a second (it was about 4.5 s)
+- On Android the difference is even bigger: songs no longer wait for yt-dlp on the phone
+- Connections stay open between songs, so the next one doesn't start from scratch
+
 **Songs play reliably, start to finish**
 - YouTube and YouTube Music songs no longer stop partway through: they play from YouTube's HLS audio, which plays to the end (YouTube now cuts off many direct links after about a minute)
 - If a link stops working mid-song anyway, Tunewire fetches a new one and carries on
@@ -27,6 +34,7 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Tidier player bar, window buttons, empty and error screens, and rounder corners that match everywhere
 
 **Fixes**
+- Settings → Tools → Clear cache frees the space used for cover images, song links and temporary song files (your library and settings stay)
 - Opening a share link (playlist, song, Listen together) asks once instead of twice
 
 **Your own server**

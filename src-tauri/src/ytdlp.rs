@@ -328,6 +328,12 @@ pub async fn stream_info(url: &str) -> AppResult<StreamInfo> {
     cell.get_or_init(|| extract_stream(url)).await.clone()
 }
 
+/// Forget every looked-up song link and the visitor id (Settings → Clear cache).
+pub fn clear_caches() {
+    *STREAMS.locked() = None;
+    *VISITOR.locked() = None;
+}
+
 /// Drop a cached stream (it failed to open, e.g. expired).
 pub fn forget_stream(url: &str) {
     if let Some(map) = STREAMS.locked().as_mut() {
@@ -337,7 +343,7 @@ pub fn forget_stream(url: &str) {
 
 /// Background resolves at once (hover, top result, next in queue); more are
 /// dropped so they never crowd out a click.
-const MAX_PREFETCH: usize = 2;
+const MAX_PREFETCH: usize = 4;
 
 /// Resolve in the background if a prefetch slot is free (never delays real
 /// work). Returns false when it was dropped, so the page can ask again later.
@@ -362,6 +368,10 @@ pub fn prefetch_stream(url: String) -> bool {
 /// One throwaway YouTube lookup after startup: the worker then holds a
 /// ready instance with open connections, so the first real song is faster.
 pub async fn warm_youtube() {
+    // The direct path: visitor id and open connections to YouTube.
+    if youtube_direct("https://www.youtube.com/watch?v=jNQXAC9IVRw").await.is_some() {
+        return;
+    }
     let _ = extract_stream_with_format("https://www.youtube.com/watch?v=jNQXAC9IVRw", AUDIO_FORMAT).await;
 }
 
@@ -425,9 +435,33 @@ pub async fn extract_stream(url: &str) -> AppResult<StreamInfo> {
         }
     }
     if is_youtube(url) {
+        // Fast path: two requests from here (~0.25 s); yt-dlp for the rest.
+        if let Some(info) = youtube_direct(url).await {
+            return Ok(info);
+        }
         return extract_stream_with_format(url, YOUTUBE_FORMAT).await;
     }
     extract_stream_with_format(url, AUDIO_FORMAT).await
+}
+
+/// The song's audio straight from YouTube (see `ytfast`); None = ask yt-dlp.
+async fn youtube_direct(url: &str) -> Option<StreamInfo> {
+    if std::env::var_os("TUNEWIRE_NO_DIRECT").is_some() {
+        return None; // benchmarks: the yt-dlp path alone
+    }
+    let id = crate::ytfast::video_id(url)?;
+    let vd = visitor_data().await?;
+    let r = tauri::async_runtime::spawn_blocking(move || crate::ytfast::stream(&id, &vd)).await.ok()?;
+    match r {
+        Ok(info) => Some(info),
+        Err(e) => {
+            // YouTube wants a new visitor id: the next song fetches one.
+            if e.to_string().to_lowercase().contains("not a bot") {
+                forget_visitor_data();
+            }
+            None
+        }
+    }
 }
 
 fn is_youtube(url: &str) -> bool {

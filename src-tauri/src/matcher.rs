@@ -211,7 +211,20 @@ async fn find_fast(sp: &TrackVersion) -> AppResult<Option<TrackVersion>> {
         }
         AppResult::Ok(best)
     };
-    let (isrc, title) = tokio::join!(by_isrc, by_title);
+    // Head start: the search box's suggestions answer in ~0.1 s (the full
+    // searches take ~0.5 s) and their top song is usually the match. Its
+    // audio starts loading now; the pick below is still made as before, and
+    // a different pick only costs this one background lookup.
+    let head_start = async {
+        let query = format!("{} {}", sp.artist.split(',').next().unwrap_or(&sp.artist), crate::search::strip_noise(&sp.title));
+        if let Ok(s) = crate::ytm::suggestions(&query).await {
+            let likely = s.items.into_iter().filter_map(|c| c.track).filter_map(|t| t.versions.into_iter().next()).find(|v| crate::search::same_title(sp, v));
+            if let Some(v) = likely {
+                crate::ytdlp::prefetch_stream(v.url);
+            }
+        }
+    };
+    let (isrc, title, ()) = tokio::join!(by_isrc, by_title, head_start);
     let finish = |mut v: TrackVersion, isrc: bool| {
         v.matched_for = Some(Platform::Spotify);
         v.isrc_match = isrc;

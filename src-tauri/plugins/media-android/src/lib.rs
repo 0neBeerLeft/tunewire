@@ -45,6 +45,11 @@ impl<R: Runtime> Media<R> {
         Ok((v["top"].as_f64().unwrap_or(0.0), v["bottom"].as_f64().unwrap_or(0.0)))
     }
 
+    /// Empty the WebView's disk cache. Blocking.
+    pub fn clear_web_cache(&self) -> Result<(), String> {
+        self.0.run_mobile_plugin::<serde_json::Value>("clearWebCache", ()).map(|_| ()).map_err(|e| e.to_string())
+    }
+
     /// Open a link in the browser (or the APK installer). Blocking.
     pub fn open_url(&self, url: &str) -> Result<(), String> {
         self.0.run_mobile_plugin::<serde_json::Value>("openUrl", Url { url }).map(|_| ()).map_err(|e| e.to_string())

@@ -62,6 +62,7 @@ mod stream;
 mod sync_ext;
 mod themes;
 mod ytdlp;
+mod ytfast;
 mod ytdlp_worker;
 mod ytm;
 
@@ -363,6 +364,7 @@ pub fn run() {
             system::ytdlp_install,
             extras::open_link,
             extras::system_insets,
+            extras::clear_cache,
             discover::search_tracks,
             discover::load_playlist,
             discover::extract_stream_url,

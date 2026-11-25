@@ -89,6 +89,11 @@ static CACHE: Mutex<Option<ResponseCache>> = Mutex::new(None);
 const TTL: Duration = Duration::from_secs(20 * 60);
 const CACHE_MAX: usize = 40;
 
+/// Forget the cached YouTube Music pages (Settings → Clear cache).
+pub fn clear_cache() {
+    *CACHE.locked() = None;
+}
+
 /// POST with a 20-minute response cache (pages are revisited a lot).
 async fn post(endpoint: &str, extra: Value) -> AppResult<Value> {
     let key = format!("{endpoint}|{extra}");

@@ -6712,6 +6712,8 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "ureq",
+ "webview2-com",
+ "windows-core 0.62.2",
  "zip 2.6.1",
 ]
 

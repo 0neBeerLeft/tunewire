@@ -515,3 +515,67 @@ fn bench_spotify_app() {
     }
     println!("APP MATCHED     median {} ms (match saved, new link)", med(&mut restart).0);
 }
+
+/// One click on a YouTube song, cold (nothing prefetched): the link, then
+/// the first audio. `TUNEWIRE_NO_DIRECT=1` measures the yt-dlp path alone.
+///   cargo test --release --lib bench_click -- --ignored --nocapture
+#[test]
+#[ignore]
+fn bench_click() {
+    let rt = rt();
+    let _g = rt.enter();
+    let ids = [
+        "dQw4w9WgXcQ", "fJ9rUzIMcZQ", "kJQP7kiw5Fk", "60ItHLz5WEA", "hTWKbfoikeg", "JGwWNGJdvx8", "OPf0YbXqDm0", "09R8_2nJtjg",
+        "4NRXx6U8ABQ", "YQHsXMglC9A", "CevxZvSJLk8", "RgKAFK5djSk", "pRpeEdMmmQ0", "lp-EO5I60KA", "2Vv-BfVoq4g", "nfWlot6h_JM",
+    ];
+    // Startup work the app does once (visitor id; the worker where it runs).
+    rt.block_on(crate::ytdlp_worker::warm(crate::ytdlp::binary()));
+    rt.block_on(crate::ytdlp::warm_youtube());
+    let (mut links, mut audios, mut totals) = (Vec::new(), Vec::new(), Vec::new());
+    let mut fails = 0;
+    for id in ids {
+        let url = format!("https://music.youtube.com/watch?v={id}");
+        let t0 = Instant::now();
+        let info = rt.block_on(crate::ytdlp::extract_stream(&url));
+        let d_link = t0.elapsed();
+        let t = Instant::now();
+        let ok = info.as_ref().ok().map(crate::stream::open).map(|r| r.map(|_| ()).map_err(|e| e.to_string()));
+        let d_audio = t.elapsed();
+        println!("{id}  link {}  audio {}  total {}  {:?}", ms(d_link), ms(d_audio), ms(t0.elapsed()), ok.as_ref().map(|r| r.as_ref().err()).unwrap_or(Some(&"no link".to_string())));
+        if matches!(ok, Some(Ok(()))) {
+            links.push(d_link);
+            audios.push(d_audio);
+            totals.push(t0.elapsed());
+        } else {
+            fails += 1;
+        }
+    }
+    let stat = |v: &mut Vec<Duration>| {
+        v.sort();
+        if v.is_empty() {
+            return "-".to_string();
+        }
+        format!("median {} p90 {}", ms(v[v.len() / 2]), ms(v[(v.len() * 9 / 10).min(v.len() - 1)]))
+    };
+    println!("CLICK  link {} | audio {} | total {} | played {} of {}", stat(&mut links), stat(&mut audios), stat(&mut totals), totals.len(), totals.len() + fails);
+    // Songs looked up ahead (next in queue, hover, top result): the click.
+    let mut pre = Vec::new();
+    for id in ["Zi_XLOBDo_Y", "uelHwf8o7_U", "SlPhMPnQ58k", "ru0K8uYEZWw", "u9Dg-g7t2l4", "ktvTqknDobU"] {
+        let url = format!("https://music.youtube.com/watch?v={id}");
+        if let Ok(info) = rt.block_on(crate::ytdlp::stream_info(&url)) {
+            crate::stream::warm_connection(&info);
+        }
+        let t0 = Instant::now();
+        let ok = rt.block_on(crate::ytdlp::stream_info(&url)).ok().map(|i| crate::stream::open(&i).is_ok()).unwrap_or(false);
+        println!("{id}  prefetched click {}  ok={ok}", ms(t0.elapsed()));
+        pre.push(t0.elapsed());
+    }
+    println!("PREFETCHED CLICK {}", stat(&mut pre));
+    // A click after a pause (connections kept open or not).
+    std::thread::sleep(Duration::from_secs(45));
+    let t0 = Instant::now();
+    let info = rt.block_on(crate::ytdlp::extract_stream("https://music.youtube.com/watch?v=y6120QOlsfU"));
+    let d_link = t0.elapsed();
+    let ok = info.as_ref().ok().map(crate::stream::open).is_some_and(|r| r.is_ok());
+    println!("AFTER 45 s IDLE  link {}  total {}  ok={ok}", ms(d_link), ms(t0.elapsed()));
+}

@@ -62,6 +62,32 @@ fn log_path(dir: &Path) -> PathBuf {
     dir.join("plays.jsonl")
 }
 
+/// Plays from your other devices (signed in, "Sync my library"), merged into
+/// stats, Wrapped and mixes. Kept apart: only this device's own log is
+/// uploaded, and a restore of plays.jsonl leaves these alone.
+fn remote_path(dir: &Path) -> PathBuf {
+    dir.join("plays_remote.jsonl")
+}
+
+/// A play from another device, as stored in the account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemotePlay {
+    pub device: String,
+    pub t: u64,
+    pub secs: f64,
+    pub track: Track,
+}
+
+impl RemotePlay {
+    fn play(&self) -> Play {
+        Play { t: self.t, secs: self.secs, est: false, platform: self.track.versions.first().map(|v| v.platform), track: self.track.clone() }
+    }
+}
+
+fn read_lines<T: serde::de::DeserializeOwned>(path: &Path) -> Vec<T> {
+    std::fs::read_to_string(path).map(|s| s.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()).unwrap_or_default()
+}
+
 /// Load the log (importing the old history once, so stats aren't empty on day one).
 pub fn init(dir: &Path, history: &[crate::store::HistoryEntry]) {
     *DIR.locked() = Some(dir.to_path_buf());
@@ -84,7 +110,60 @@ fn load() -> Vec<Play> {
     let Some(dir) = DIR.locked().clone() else {
         return Vec::new();
     };
-    std::fs::read_to_string(log_path(&dir)).map(|s| s.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()).unwrap_or_default()
+    let mut all: Vec<Play> = read_lines(&log_path(&dir));
+    let remote: Vec<RemotePlay> = read_lines(&remote_path(&dir));
+    if !remote.is_empty() {
+        all.extend(remote.iter().map(RemotePlay::play));
+        all.sort_by_key(|p| p.t);
+    }
+    all
+}
+
+/// This device's own plays after `since` (ms), oldest first, for uploading.
+pub fn local_since(since: u64, limit: usize) -> Vec<Play> {
+    let Some(dir) = DIR.locked().clone() else {
+        return Vec::new();
+    };
+    let mut own: Vec<Play> = read_lines::<Play>(&log_path(&dir)).into_iter().filter(|p| p.t > since).collect();
+    own.sort_by_key(|p| p.t);
+    own.truncate(limit);
+    own
+}
+
+/// Add plays from other devices (ones already here are skipped). Returns how many were new.
+pub fn import_remote(plays: Vec<RemotePlay>) -> usize {
+    let Some(dir) = DIR.locked().clone() else {
+        return 0;
+    };
+    let added = import_into(&remote_path(&dir), plays);
+    if added > 0 {
+        reload();
+    }
+    added
+}
+
+fn import_into(path: &Path, plays: Vec<RemotePlay>) -> usize {
+    let mut seen: HashSet<(String, u64)> = read_lines::<RemotePlay>(path).into_iter().map(|p| (p.device, p.t)).collect();
+    let mut out = String::new();
+    let mut added = 0;
+    for p in plays {
+        let ok = !p.device.is_empty() && p.device.len() <= 64 && p.secs.is_finite() && (0.0..=86400.0).contains(&p.secs) && !p.track.key.is_empty() && !p.track.versions.is_empty();
+        if !ok || !seen.insert((p.device.clone(), p.t)) {
+            continue;
+        }
+        if let Ok(line) = serde_json::to_string(&p) {
+            out.push_str(&line);
+            out.push('\n');
+            added += 1;
+        }
+    }
+    if added > 0 {
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(path);
+        if let Ok(mut f) = file {
+            let _ = f.write_all(out.as_bytes());
+        }
+    }
+    added
 }
 
 /// All logged plays, oldest first.
@@ -435,6 +514,19 @@ mod tests {
             isrc_match: false,
         };
         Play { t, secs, est: false, platform: Some(Platform::Ytmusic), track: Track::from_version(v) }
+    }
+
+    #[test]
+    fn remote_plays_import_once_and_read_back() {
+        let path = std::env::temp_dir().join(format!("tw-remote-{}-{}.jsonl", std::process::id(), now_ms()));
+        let r = |device: &str, t: u64, secs: f64| RemotePlay { device: device.into(), t, secs, track: play(t, secs, "S", "A").track };
+        assert_eq!(import_into(&path, vec![r("phone", 1, 100.0), r("phone", 2, 50.0), r("phone", 1, 100.0)]), 2, "a repeat in the same batch counts once");
+        assert_eq!(import_into(&path, vec![r("phone", 2, 50.0), r("tablet", 2, 50.0)]), 1, "already imported: skipped; another device: new");
+        assert_eq!(import_into(&path, vec![r("", 9, 10.0), r("phone", 10, f64::NAN), r("phone", 11, -1.0)]), 0, "bad plays are refused");
+        let back: Vec<RemotePlay> = read_lines(&path);
+        assert_eq!(back.len(), 3);
+        assert_eq!(back[0].play().platform, Some(Platform::Ytmusic));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

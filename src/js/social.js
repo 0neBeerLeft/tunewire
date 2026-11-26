@@ -97,9 +97,10 @@ function askCloudPrivacy(force = false) {
   const wrapped = h('input', { type: 'checkbox', checked: cloud.profile?.share_wrapped !== false });
   const stats = h('input', { type: 'checkbox', checked: !!cloud.profile?.share_stats });
   const library = h('input', { type: 'checkbox', checked: state.settings?.sync_asked ? !!state.settings.sync_library : true });
+  const page = h('input', { type: 'checkbox', checked: !!cloud.profile?.public_page });
   const row = (label, help, input) => h('label', { class: 'setting' }, h('div', { class: 'label' }, label, h('small', {}, help)), h('span', { class: 'switch' }, input, h('span')));
   const save = async () => {
-    await saveCloudPrivacy({ share_activity: activity.checked, share_wrapped: wrapped.checked, share_stats: stats.checked });
+    await saveCloudPrivacy({ share_activity: activity.checked, share_wrapped: wrapped.checked, share_stats: stats.checked, public_page: page.checked });
     await updateSettings({ cloud_privacy_asked: true });
     m.close();
     if (library.checked !== !!state.settings.sync_library || !state.settings.sync_asked) await setLibrarySync(library.checked);
@@ -111,7 +112,8 @@ function askCloudPrivacy(force = false) {
       row('Share what I’m playing', 'Approved followers see your current song in their Friends panel.', activity),
       row('Share my listening', 'Your top artists and songs, recently played and minutes this week show on your profile for approved followers, and you join the friends’ leaderboard.', stats),
       row('Compare Wrapped with friends', 'Approved friends can compare their year in music with yours (only after you press “Compare”).', wrapped),
-      row('Sync my library', 'Your playlists and Liked Songs on every device you sign in to, as private copies only you can see.', library)),
+      row('Sync my library', 'Your playlists, Liked Songs, followed artists, look-and-sound settings and listening history on every device you sign in to, as private copies only you can see.', library),
+      row('Public profile page', 'Anyone with your profile link sees a web page with your name, picture, bio, pinned songs, badges and public playlists (and top artists if you share your listening). Nice for a Discord bio.', page)),
     footer: [h('button', { class: 'btn primary', onclick: save }, 'Save')],
     onClose: () => { if (!state.settings.cloud_privacy_asked) updateSettings({ cloud_privacy_asked: true }); },
   });
@@ -155,7 +157,7 @@ function accountSettingsRows() {
           try { await db('PATCH', `profiles?id=eq.${s.user_id}`, { name: name.slice(0, 40) }); cloud.session.name = name.slice(0, 40); cloudChanged(); toast('Name saved', 'ok', 1500); } catch (e) { toast(errMsg(e), 'error'); }
         } }, 'Change name'),
         h('button', { class: 'btn small', onclick: () => openProfile(s.user_id) }, 'Profile'), h('button', { class: 'btn small', onclick: signOut }, 'Sign out'))),
-    h('div', { class: 'setting' }, h('div', { class: 'label' }, 'Sync my library', h('small', {}, 'Your playlists and Liked Songs on every device you sign in to. The online copies are private: only you can see them.')), h('label', { class: 'switch' }, syncInput, h('span'))),
+    h('div', { class: 'setting' }, h('div', { class: 'label' }, 'Sync my library', h('small', {}, 'Your playlists, Liked Songs, followed artists, look-and-sound settings and listening history on every device you sign in to. The online copies are private: only you can see them.')), h('label', { class: 'switch' }, syncInput, h('span'))),
     toggle('Share what I’m listening to', 'Approved followers see the song you’re playing in their Friends panel.', 'share_activity'),
     toggle('Share my listening', 'Top artists and songs, recently played and minutes this week on your profile (approved followers only), and the friends’ leaderboard.', 'share_stats'),
     toggle('Compare Wrapped with friends', 'Approved friends can compare their year with yours. Turning this off removes what you shared.', 'share_wrapped'),
@@ -1641,6 +1643,7 @@ function notifText(n) {
     case 'playlist_activity': return `${who} changed “${n.data?.title || 'a playlist'}”`;
     case 'jam_started': return `${who} started a listening session`;
     case 'song_shared': return `${who} sent you “${n.data?.title || 'a song'}”`;
+    case 'share_reply': return `${who} replied about “${n.data?.title || 'your song'}”: ${String(n.data?.reply || '').slice(0, 200)}`;
     default: return 'Something happened';
   }
 }
@@ -1649,6 +1652,7 @@ function notifAction(n) {
   if (n.kind === 'jam_started' && LINK_CODES.j.test(n.data?.code || '')) return { label: 'Join', onClick: () => confirmJoinJam(n.data.code) };
   if (n.kind === 'playlist_activity' && n.data?.playlist) return { label: 'Open', onClick: () => openSharedPlaylist(n.data.playlist) };
   if (n.kind === 'follow_accepted') return { label: 'View', onClick: () => openProfile(n.actor) };
+  if (n.kind === 'share_reply' && UUID_RE.test(n.actor || '')) return { label: 'Profile', onClick: () => openProfile(n.actor) };
   if (n.kind === 'song_shared') return { label: 'Open', onClick: () => { friends.tab = 'inbox'; setPanelOpen(true); showPanel('friends'); renderFriends(); } };
   return null;
 }
@@ -1785,6 +1789,13 @@ async function openProfile(userId, { push = true, tab = 'playlists' } = {}) {
         songList(st.recent, 'Recently played'));
     };
 
+    const pinnedCard = () => {
+      const pins = (Array.isArray(p.pinned) ? p.pinned : []).filter((t) => t && typeof t.key === 'string').map(fromCloudTrack);
+      if (!pins.length) return null;
+      return h('div', { class: 'profile-pinned' }, h('div', { class: 'section-title' }, h('span', { html: icon('pin') }), 'Pinned'),
+        h('div', { class: 'track-list', role: 'listbox', 'aria-label': 'Pinned songs' }, ...pins.map((t, i) => trackRow(t, i, { onPlay: () => playList(pins, i) }))));
+    };
+
     const render = () => {
       const facts = [
         followsMe.length ? h('span', { class: 'follows-you' }, 'Follows you') : null,
@@ -1801,6 +1812,7 @@ async function openProfile(userId, { push = true, tab = 'playlists' } = {}) {
               h('span', {}, count(lists.length, 'public playlist', 'public playlists')))),
           h('div', { class: 'profile-actions' },
             isMe ? h('button', { class: 'btn small', onclick: () => editProfile(p, () => openProfile(userId, { push: false, tab })) }, 'Edit profile') : followBtn(p.id, p.name),
+            !isMe && st?.top_tracks?.length ? h('button', { class: 'btn small', html: `${icon('sparkle')}Blend`, title: `A mix of your taste and ${p.name}’s`, onclick: () => openBlend(p, st) }) : null,
             !isMe && signedIn() ? h('button', { class: 'ab-icon', title: 'Send a song: use ⋯ → Send to a friend on any song', html: icon('send'), onclick: () => { const t = state.playback?.current?.track; if (t) sendSongToFriend(t); else toast('Play a song, then send it with ⋯ → Send to a friend', 'info', 3000); } }) : null,
             isMe ? h('button', { class: 'btn small', onclick: () => askCloudPrivacy(true) }, 'Privacy') : null,
             h('button', { class: 'ab-icon', title: 'Copy profile link', html: icon('link'), onclick: () => { copyText(PROFILE_LINK(p.id)); toast('Profile link copied', 'ok', 1500); } }))),
@@ -1808,7 +1820,8 @@ async function openProfile(userId, { push = true, tab = 'playlists' } = {}) {
         p.bio ? h('p', { class: 'profile-bio' }, p.bio) : null,
         mutuals.length ? h('div', { class: 'mutuals' }, h('span', { class: 'avatar-stack' }, ...mutuals.slice(0, 3).map((m) => avatarEl(m.avatar, m.name, 'avatar xs'))),
           h('span', {}, `Followed by ${mutuals.slice(0, 2).map((m) => m.name).join(', ')}${mutuals.length > 2 ? ` and ${mutuals.length - 2} other${mutuals.length - 2 === 1 ? '' : 's'} you follow` : ''}`)) : null,
-        nowCard());
+        nowCard(),
+        pinnedCard());
       const tabs = h('div', { class: 'profile-tabs chips', role: 'tablist' },
         tabBtn('playlists', `Playlists · ${lists.length}`), tabBtn('listening', 'Listening'), tabBtn('followers', `Followers · ${accepted.length}`), tabBtn('following', `Following · ${following.length}`));
 

@@ -1725,6 +1725,11 @@ body.dragging-tracks .track:hover { background: transparent; }
 .inbox-note { margin: 0; font-size: 14px; }
 .inbox-song { display: flex; align-items: center; gap: 10px; }
 .inbox-react { display: flex; gap: 4px; }
+.profile-pinned .section-title { display: flex; align-items: center; gap: 8px; }
+.profile-pinned .section-title svg.i { width: 18px; height: 18px; color: var(--accent); }
+.inbox-reply { display: flex; align-items: center; gap: 6px; }
+.inbox-reply .input { flex: 1; min-width: 0; height: 34px; }
+.inbox-replied { margin: 0; flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .inbox-react button { padding: 2px 7px; border-radius: var(--r-md); font-size: 14px; opacity: .55; }
 .inbox-react button:hover, .inbox-react button.on { opacity: 1; background: color-mix(in srgb, var(--text) 10%, transparent); }
 

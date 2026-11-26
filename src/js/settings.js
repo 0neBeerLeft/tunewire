@@ -7,6 +7,7 @@
 async function updateSettings(patch) {
   try {
     state.settings = await call('update_settings', { patch });
+    if (typeof queueAccountUpload === 'function' && Object.keys(patch || {}).some((k) => SYNCED_SETTINGS.includes(k))) queueAccountUpload();
   } catch (e) { toast(errMsg(e), 'error'); }
 }
 

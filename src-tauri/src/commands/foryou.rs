@@ -8,7 +8,7 @@ use crate::error::{AppError, AppResult};
 use crate::foryou::{self, ForYou};
 use crate::models::Track;
 use crate::state::AppState;
-use crate::stats::{self, Stats};
+use crate::stats::{self, Play, RemotePlay, Stats};
 
 fn taste_sources(st: &AppState) -> (Vec<Track>, Vec<Track>) {
     let lib = st.store.library.locked();
@@ -47,4 +47,16 @@ pub fn save_share_image(app: AppHandle, name: String, data: String) -> AppResult
     let path = dir.join(format!("{}.png", safe.trim()));
     std::fs::write(&path, bytes)?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// This device's plays after `since` (ms), for the account's history.
+#[tauri::command]
+pub fn plays_since(since: u64, limit: Option<usize>) -> Vec<Play> {
+    stats::local_since(since, limit.unwrap_or(500).min(2000))
+}
+
+/// Plays from your other devices: merged into stats and mixes.
+#[tauri::command(async)]
+pub fn import_plays(plays: Vec<RemotePlay>) -> usize {
+    stats::import_remote(plays)
 }

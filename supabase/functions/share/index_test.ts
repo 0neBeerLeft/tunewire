@@ -79,7 +79,43 @@ Deno.test("profiles are read through profile_preview, not the table", async () =
     return new Response(JSON.stringify(url.includes("rpc/profile_preview") ? [{ name: "Alex" }] : []));
   }) as typeof fetch;
   assertStringIncludes(await (await get(`/share/u/${UID}`, f)).text(), "Alex on Tunewire");
-  assertEquals(seen, [`POST https://db.test/rest/v1/rpc/profile_preview {"uid":"${UID}"}`]);
+  assertEquals(seen, [`POST https://db.test/rest/v1/rpc/public_profile {"uid":"${UID}"}`, `POST https://db.test/rest/v1/rpc/profile_preview {"uid":"${UID}"}`]);
+});
+
+Deno.test("a public profile is a real page, escaped, with no scripts", async () => {
+  const UID = "00000000-0000-0000-0000-00000000000a";
+  const pp = {
+    name: "Alex <script>", bio: "hi \"there\"", pronouns: "they/them", accent_color: 0x123456, followers: 3, badges: ["streak7", "nope"],
+    avatar: `media:${UID}/0123456789abcdef0123.png`,
+    pinned: [{ key: "a::1", title: "Song <b>", artist: "Band", thumbnail: "javascript:alert(1)", versions: [{ platform: "youtube", url: "https://youtube.com/watch?v=x" }, { platform: "x", url: "javascript:alert(1)" }] }],
+    top_artists: [{ name: "Daft Punk", thumbnail: "https://i.ytimg.com/a.jpg" }],
+    playlists: [{ id: "11111111-1111-1111-1111-111111111111", title: "Road trip" }, { id: "../etc", title: "bad" }],
+  };
+  const r = await get(`/share/u/${UID}`, fake({ public_profile: pp }));
+  const html = await r.text();
+  assertStringIncludes(html, "Alex &lt;script&gt;");
+  assert(!html.includes("<script"), "no scripts");
+  assert(!html.includes("javascript:"), "no script links");
+  assert(!html.includes('http-equiv="refresh"'), "it stays on the page");
+  assertStringIncludes(html, "Song &lt;b&gt;");
+  assertStringIncludes(html, "🔥 7-day streak");
+  assertStringIncludes(html, "Daft Punk");
+  assertStringIncludes(html, "https://share.test/p/11111111-1111-1111-1111-111111111111");
+  assert(!html.includes("../etc"), "only real playlist ids");
+  assertStringIncludes(html, "#123456");
+  assertStringIncludes(html, "profile-media/" + UID + "/0123456789abcdef0123.png");
+  assertStringIncludes(r.headers.get("Content-Security-Policy") || "", "default-src 'none'");
+  // The song link carries only web addresses.
+  const code = html.match(/share\.test\/s\/([A-Za-z0-9_-]+)/)![1];
+  const o = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))));
+  assertEquals(o.v, [["youtube", "https://youtube.com/watch?v=x"]]);
+});
+
+Deno.test("a private profile still gets the short preview", async () => {
+  const UID = "00000000-0000-0000-0000-00000000000a";
+  const html = await (await get(`/share/u/${UID}`, fake({ public_profile: null, profile_preview: [{ name: "Alex" }] }))).text();
+  assertStringIncludes(html, "Alex on Tunewire");
+  assertStringIncludes(html, 'http-equiv="refresh"');
 });
 
 Deno.test("a malformed escape is not a server error", async () => {

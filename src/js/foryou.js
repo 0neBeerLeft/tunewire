@@ -214,7 +214,7 @@ function statCard(value, label, img) {
 
 function openMix(mix, { push = true } = {}) {
   showView('mix', { push, reopen: () => openMix(mix, { push: false }) });
-  const kicker = { daily: 'Daily Mix · made for you', discover: 'Made for you · new every Monday', repeat: 'From your listening', rediscover: 'From your listening' }[mix.kind] || 'Mix';
+  const kicker = { daily: 'Daily Mix · made for you', discover: 'Made for you · new every Monday', repeat: 'From your listening', rediscover: 'From your listening', blend: 'Blend · your taste and a friend’s' }[mix.kind] || 'Mix';
   renderCollection($('#mix-body'), {
     id: `mix:${mix.id}`,
     kind: kicker,

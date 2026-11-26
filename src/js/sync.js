@@ -798,7 +798,7 @@ function askLibrarySync() {
     subtitle: 'Tunewire can keep your playlists and Liked Songs in sync on every device you sign in to.',
     body: h('div', { class: 'privacy-list' },
       h('label', { class: 'setting' },
-        h('div', { class: 'label' }, 'Sync my library', h('small', {}, 'Private online copies only you can see. Change it any time in Settings → Account.')),
+        h('div', { class: 'label' }, 'Sync my library', h('small', {}, 'Playlists, Liked Songs, followed artists, settings and listening history on all your devices. Private online copies only you can see. Change it any time in Settings → Account.')),
         h('span', { class: 'switch' }, input, h('span')))),
     footer: [h('button', { class: 'btn primary', onclick: async () => { m.close(); await setLibrarySync(input.checked); } }, 'Continue')],
     onClose: () => { if (!state.settings.sync_asked) updateSettings({ sync_asked: true }); },
@@ -826,3 +826,140 @@ setInterval(() => {
   syncChangedSoon();
 }, 15000);
 window.addEventListener('focus', syncChangedSoon);
+
+// ===========================================================================
+// Settings, followed artists and listening history on every device
+// ("Sync my library" on, signed in).
+//
+// Settings: a whitelist of look-and-sound settings (not folders, devices or
+// keys) plus followed artists, saved as one row. A device writes it a few
+// seconds after a change; at start (and every 10 minutes) a newer row from
+// another device is applied here.
+// History: each device uploads its own plays and imports the others' into a
+// separate log, so stats, Wrapped and mixes count every device.
+// ===========================================================================
+
+const SYNCED_SETTINGS = ['platform_order', 'search_limit', 'include_youtube_in_all', 'include_spotify_in_all', 'normalize', 'crossfade', 'lyrics', 'autoplay',
+  'eq_enabled', 'eq_gains', 'cover_accent', 'cover_colors', 'charts_country', 'background', 'background_strength', 'glass_transparency', 'show_sources', 'theme'];
+const acct = { timer: null, applying: false, pulling: false, histBusy: false };
+const accountSyncOn = () => signedIn() && !!state.settings?.sync_library;
+const acctKey = (k) => `tw-${k}:${me()}`;
+const artistNorm = (n) => String(n || '').trim().toLowerCase();
+
+function pickSynced(s) {
+  const o = {};
+  for (const k of SYNCED_SETTINGS) if (s && k in s) o[k] = s[k];
+  return o;
+}
+
+/** A setting, theme or followed artist changed here: save it for the other devices soon. */
+function queueAccountUpload() {
+  if (!accountSyncOn() || acct.applying) return;
+  clearTimeout(acct.timer);
+  acct.timer = setTimeout(uploadAccount, 3000);
+}
+
+async function uploadAccount() {
+  if (!accountSyncOn()) return;
+  try {
+    const artists = (await call('list_followed').catch(() => [])).slice(0, 500)
+      .map((a) => ({ name: a.name, url: a.url || null, thumbnail: a.thumbnail || null }));
+    const at = new Date().toISOString();
+    await db('POST', 'user_sync?on_conflict=user_id', { user_id: me(), settings: pickSynced(state.settings), artists, updated_at: at }, { prefer: 'resolution=merge-duplicates' });
+    localStorage.setItem(acctKey('sync-at'), at);
+  } catch { /* the next change or pull tries again */ }
+}
+
+/** Take the settings and followed artists another device saved, when newer than what's here. */
+async function pullAccount() {
+  if (!accountSyncOn() || acct.pulling) return;
+  acct.pulling = true;
+  try {
+    const [row] = await db('GET', `user_sync?user_id=eq.${me()}&select=settings,artists,updated_at`);
+    if (!row) { await uploadAccount(); return; } // the first device: its settings become the account's
+    const mine = localStorage.getItem(acctKey('sync-at'));
+    if (mine && Date.parse(row.updated_at) <= Date.parse(mine)) return;
+    acct.applying = true;
+    const remote = row.settings && typeof row.settings === 'object' ? row.settings : {};
+    const patch = {};
+    for (const k of SYNCED_SETTINGS) {
+      if (k !== 'theme' && k in remote && JSON.stringify(remote[k]) !== JSON.stringify(state.settings?.[k])) patch[k] = remote[k];
+    }
+    let changed = false;
+    if (Object.keys(patch).length) {
+      try { state.settings = await call('update_settings', { patch }); changed = true; } catch { /* a value this version doesn't know */ }
+    }
+    if (typeof remote.theme === 'string' && remote.theme !== state.settings?.theme) {
+      const themes = await call('list_themes').catch(() => []);
+      if (themes.some((t) => t.id === remote.theme)) { await activateTheme(remote.theme); changed = true; }
+    }
+    // Followed artists: the account's list.
+    if (Array.isArray(row.artists)) {
+      const local = await call('list_followed').catch(() => null);
+      if (local) {
+        const want = new Map(row.artists.filter((a) => a?.name).map((a) => [artistNorm(a.name), a]));
+        const have = new Set(local.map((a) => artistNorm(a.name)));
+        for (const [k, a] of want) if (!have.has(k)) { await call('follow_artist', { name: a.name, url: a.url || null, thumbnail: a.thumbnail || null }).catch(() => {}); changed = true; }
+        for (const a of local) if (!want.has(artistNorm(a.name))) { await call('follow_artist', { name: a.name }).catch(() => {}); changed = true; }
+      }
+    }
+    localStorage.setItem(acctKey('sync-at'), row.updated_at);
+    if (changed && state.view === 'settings' && typeof renderSettings === 'function') renderSettings();
+  } catch { /* offline: next time */ } finally {
+    acct.applying = false;
+    acct.pulling = false;
+  }
+}
+
+/** Upload this device's new plays, import the other devices' new ones. */
+async function syncHistory() {
+  if (!accountSyncOn() || acct.histBusy) return;
+  acct.histBusy = true;
+  try {
+    await syncLoad();
+    if (!syncs.device) return;
+    let since = Number(localStorage.getItem(acctKey('hist-up')) || 0);
+    for (let page = 0; page < 20; page++) {
+      const plays = await call('plays_since', { since, limit: 500 });
+      if (!plays.length) break;
+      const rows = plays.map((p) => ({
+        device: syncs.device,
+        played_at: new Date(p.t).toISOString(),
+        seconds: Math.max(0, Math.min(86400, Math.round(p.secs))),
+        track: historyTrack(p.track),
+      }));
+      await db('POST', 'listen_history?on_conflict=user_id,device,played_at', rows, { prefer: 'resolution=ignore-duplicates' });
+      since = plays[plays.length - 1].t;
+      localStorage.setItem(acctKey('hist-up'), String(since));
+      if (plays.length < 500) break;
+    }
+    let after = localStorage.getItem(acctKey('hist-down')) || '1970-01-01T00:00:00Z';
+    let added = 0;
+    for (let page = 0; page < 40; page++) {
+      const rows = await db('GET', `listen_history?device=neq.${syncs.device}&played_at=gt.${encodeURIComponent(after)}&order=played_at.asc&limit=1000&select=device,played_at,seconds,track`);
+      if (!rows.length) break;
+      added += await call('import_plays', { plays: rows.map((r) => ({ device: r.device, t: Date.parse(r.played_at), secs: r.seconds, track: r.track })) });
+      after = rows[rows.length - 1].played_at;
+      localStorage.setItem(acctKey('hist-down'), after);
+      if (rows.length < 1000) break;
+    }
+    if (added && state.view === 'home' && typeof renderHome === 'function') renderHome();
+  } catch { /* offline or not set up yet: next time */ } finally { acct.histBusy = false; }
+}
+
+/** A played song, small enough for the account (the version that played and one more). */
+function historyTrack(t) {
+  const s = slimTrack(t);
+  s.versions = s.versions.slice(0, 2);
+  if (JSON.stringify(s).length > 7000) s.versions = s.versions.slice(0, 1);
+  return s;
+}
+
+function accountSyncSoon() {
+  if (!accountSyncOn()) return;
+  pullAccount();
+  setTimeout(syncHistory, 5000);
+}
+onCloudChange(() => setTimeout(accountSyncSoon, 3000));
+setInterval(accountSyncSoon, 10 * 60 * 1000);
+listen('library-changed', (e) => { if (e.payload === 'followed') queueAccountUpload(); });

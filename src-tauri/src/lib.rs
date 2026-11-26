@@ -434,6 +434,8 @@ pub fn run() {
             commands::extras::gallery_install,
             commands::foryou::for_you,
             commands::foryou::refresh_for_you,
+            commands::foryou::plays_since,
+            commands::foryou::import_plays,
             commands::foryou::listening_stats,
             commands::foryou::save_share_image,
             commands::explore::search_suggestions,

@@ -22,6 +22,7 @@ async function activateTheme(id) {
     applyTheme(t);
     state.settings.theme = t.id;
     state.editingTheme = structuredClone(t);
+    if (typeof queueAccountUpload === 'function') queueAccountUpload();
     renderThemes();
     plugins.emit('theme-changed', { id: t.id, name: t.name });
   } catch (e) { toast(errMsg(e), 'error'); }

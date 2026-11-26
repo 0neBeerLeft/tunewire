@@ -18,6 +18,15 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - **Who's in sync:** the host sees each guest's sync status, with a "Resync everyone" button
 - **Back where you were:** after a restart or a dropped connection the app rejoins your session
 
+### Your account
+- **Everything on every device:** with "Sync my library" on, your followed artists, look-and-sound settings (theme, equalizer, sources…) and listening history follow you to every device
+- **Stats, Wrapped and mixes from all your devices:** what you play on your phone counts on your PC too, and the other way around
+- **Blend:** on a friend's profile, a mix of your taste and theirs, songs by artists you both love first
+- **Pinned songs:** pin up to five songs to the top of your profile (⋯ → Pin to your profile)
+- **Reply to songs friends send you:** they get a notification with your reply
+- **Public profile page:** turn it on in Privacy and your profile link opens a web page with your pinned songs, badges, top artists and playlists, nice for a Discord bio
+- Friends who share their listening now show their top 25 songs (was 6)
+
 ## v2.4.1
 
 ### Fixes

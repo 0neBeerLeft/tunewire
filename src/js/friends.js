@@ -213,10 +213,58 @@ async function renderInbox(box) {
         h('div', { class: 'grow min-w-0' }, h('b', { class: 'ellipsis' }, t.title), h('div', { class: 'meta ellipsis' }, t.artist || '')),
         h('button', { class: 'icon-btn', title: 'Play', html: icon('play'), disabled: !t.versions.length, onclick: () => playTrack(t) }),
         h('button', { class: 'icon-btn', title: 'Add to queue', html: icon('plus'), disabled: !t.versions.length, onclick: () => enqueue([t]) })),
-      react);
+      react,
+      inboxReply(r));
   }));
   // Seen now.
   if (rows.some((r) => !r.read)) db('PATCH', `song_shares?to_user=eq.${cloud.session.user_id}&read=eq.false`, { read: true }).catch(() => {});
+}
+
+/** Write back to whoever sent the song (they get a notification). */
+function inboxReply(r) {
+  const box = h('div', { class: 'inbox-reply' });
+  const show = () => {
+    if (r.reply) {
+      box.replaceChildren(h('p', { class: 'inbox-replied' }, h('span', { class: 'meta' }, 'You replied: '), r.reply),
+        h('button', { class: 'link-btn small', onclick: edit }, 'Edit'));
+    } else edit();
+  };
+  const edit = () => {
+    const input = h('input', { class: 'input small', maxlength: 200, placeholder: `Reply to ${r.sender?.name || 'them'}…`, 'aria-label': 'Reply', value: r.reply || '' });
+    const send = async () => {
+      const text = input.value.trim().slice(0, 200);
+      if (!text || text === r.reply) { if (r.reply) show(); return; }
+      input.disabled = true;
+      try {
+        await db('PATCH', `song_shares?id=eq.${r.id}`, { reply: text });
+        r.reply = text;
+        show();
+        toast('Reply sent', 'ok', 1500);
+      } catch (e) { input.disabled = false; toast(errMsg(e), 'error'); }
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); if (e.key === 'Escape' && r.reply) show(); });
+    box.replaceChildren(input, h('button', { class: 'icon-btn small', title: 'Send reply', 'aria-label': 'Send reply', html: icon('send'), onclick: send }));
+  };
+  show();
+  return box;
+}
+
+// Pinned songs ----------------------------------------------------------------------------------
+// Up to five songs at the top of your profile.
+const PIN_MAX = 5;
+function isPinned(track) { return (cloud.profile?.pinned || []).some((t) => t?.key === track.key); }
+async function togglePin(track) {
+  if (!(await requireAccount({ why: 'Pin songs to your profile' }))) return;
+  const now = Array.isArray(cloud.profile?.pinned) ? cloud.profile.pinned : [];
+  const on = now.some((t) => t?.key === track.key);
+  if (!on && now.length >= PIN_MAX) { toast(`You can pin ${PIN_MAX} songs: unpin one first (⋯ on a pinned song)`, 'info', 4000); return; }
+  const pinned = on ? now.filter((t) => t?.key !== track.key) : [...now, slimTrack(track)];
+  try {
+    await db('PATCH', `profiles?id=eq.${me()}`, { pinned });
+    cloud.profile = { ...(cloud.profile || {}), pinned };
+    toast(on ? `Unpinned “${track.title}”` : `Pinned “${track.title}” to your profile`, 'ok', 2000);
+    if (state.view === 'profile') openProfile(me(), { push: false });
+  } catch (e) { toast(errMsg(e), 'error'); }
 }
 
 // Weekly leaderboard ---------------------------------------------------------------------------------
@@ -268,8 +316,8 @@ async function publishStats(force = false) {
     const iso = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
     await db('POST', 'profile_stats?on_conflict=user_id', {
       user_id: cloud.session.user_id,
-      top_artists: month.top_artists.slice(0, 6).map((a) => ({ name: a.name, thumbnail: a.thumbnail || null, minutes: Math.round(a.minutes) })),
-      top_tracks: month.top_tracks.slice(0, 6).map((t) => ({ ...slimTrack(t.track), plays: t.plays })),
+      top_artists: month.top_artists.slice(0, 15).map((a) => ({ name: a.name, thumbnail: a.thumbnail || null, minutes: Math.round(a.minutes) })),
+      top_tracks: fitJson(month.top_tracks.slice(0, 25).map((t) => { const s = slimTrack(t.track); return { ...s, versions: s.versions.slice(0, 2), plays: t.plays }; }), 38000),
       recent: recent.filter((e, i, arr) => arr.findIndex((x) => x.track.key === e.track.key) === i).slice(0, 8).map((e) => ({ ...slimTrack(e.track), played_at: e.played_at })),
       week_start: iso,
       week_minutes: Math.min(10080, Math.round(week.minutes)),
@@ -284,6 +332,47 @@ async function publishStats(force = false) {
 }
 setInterval(() => publishStats(), 5 * 60 * 1000);
 onCloudChange(() => setTimeout(() => publishStats(), 4000));
+
+/** The array, shortened from the end until its JSON fits in `max` bytes. */
+function fitJson(arr, max) {
+  const out = [...arr];
+  while (out.length && new TextEncoder().encode(JSON.stringify(out)).length >= max) out.pop();
+  return out;
+}
+
+// Blend ----------------------------------------------------------------------------------------
+// A mix of your taste and a friend's: their top songs and yours taking
+// turns, songs by artists you both love first.
+const firstArtist = (t) => String(t?.artist || '').split(/,| & | feat\.? | x /i)[0].trim().toLowerCase();
+function blendTracks(mine, theirs, sharedArtists, max = 50) {
+  const both = (t) => sharedArtists.has(firstArtist(t));
+  const order = (arr) => [...arr.filter(both), ...arr.filter((t) => !both(t))];
+  const a = order(mine), b = order(theirs);
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; out.length < max && (i < a.length || i < b.length); i++) {
+    for (const t of [b[i], a[i]]) {
+      if (t?.key && !seen.has(t.key) && out.length < max) { seen.add(t.key); out.push(t); }
+    }
+  }
+  return out;
+}
+async function openBlend(p, st) {
+  const mine = await call('listening_stats', { range: '6m' }).catch(() => null);
+  const myTracks = (mine?.top_tracks || []).map((x) => x.track).filter((t) => t?.versions?.length);
+  const theirTracks = [...(st?.top_tracks || []), ...(st?.recent || [])].map(fromCloudTrack).filter((t) => t.versions.length);
+  if (!myTracks.length) { toast('Listen to a few songs first: a Blend mixes your top songs with theirs', 'info', 4000); return; }
+  if (!theirTracks.length) { toast(`${p.name} doesn’t share enough listening for a Blend yet`, 'info', 4000); return; }
+  const theirArtists = new Map((st.top_artists || []).filter((a) => a?.name).map((a) => [a.name.toLowerCase(), a.name]));
+  const shared = new Map((mine.top_artists || []).slice(0, 50).filter((a) => theirArtists.has(a.name.toLowerCase())).map((a) => [a.name.toLowerCase(), a.name]));
+  const tracks = blendTracks(myTracks, theirTracks, new Set(shared.keys()));
+  const first = (n) => String(n || '').split(' ')[0] || n;
+  openMix({
+    id: `blend:${p.id}`, kind: 'blend', title: `${first(cloud.session.name)} + ${first(p.name)}`,
+    subtitle: shared.size ? `You both love ${[...shared.values()].slice(0, 3).join(', ')}. Your top songs and theirs, taking turns.` : 'Your top songs and theirs, taking turns.',
+    tracks, covers: tracks.map((t) => t.thumbnail).filter(Boolean).slice(0, 4),
+  });
+}
 
 // Taste match ------------------------------------------------------------------------------------
 /** 0-100: how much your top artists overlap with theirs (null if unknown). */

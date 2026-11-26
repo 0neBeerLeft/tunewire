@@ -326,7 +326,7 @@ pub fn sign_in_blocking(provider: &str) -> AppResult<CloudSession> {
     let (verifier, challenge) = crate::loopback::pkce();
     let redirect = format!("http://127.0.0.1:{port}/callback");
     let url = format!("{}/auth/v1/authorize?provider=discord&redirect_to={}&code_challenge={challenge}&code_challenge_method=s256", c.url, crate::search::percent_encode(&redirect));
-    open::that_detached(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?;
+    crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?; // Android: through the plugin
     let code = crate::loopback::wait_for_code(listener, "/callback", None, "Tunewire", Instant::now() + Duration::from_secs(300))?;
     let v = post("/auth/v1/token?grant_type=pkce", serde_json::json!({ "auth_code": code, "code_verifier": verifier }), None)?;
     adopt(&v)

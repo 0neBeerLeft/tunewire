@@ -106,7 +106,7 @@ fn oauth_blocking(scopes: &[&str]) -> AppResult<String> {
         enc(REDIRECT),
         enc(&scopes.join(" "))
     );
-    open::that_detached(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?;
+    crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?; // Android: through the plugin
     let code = crate::loopback::wait_for_code(listener, "/login", Some(&state), "Spotify", std::time::Instant::now() + Duration::from_secs(300))?;
     let form = [("grant_type", "authorization_code"), ("code", code.as_str()), ("redirect_uri", REDIRECT), ("client_id", client_id.as_str()), ("code_verifier", verifier.as_str())]
         .iter()

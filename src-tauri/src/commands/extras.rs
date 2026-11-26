@@ -222,7 +222,7 @@ pub async fn system_insets() -> serde_json::Value {
 #[tauri::command]
 pub async fn lastfm_connect(st: State<'_, AppState>) -> AppResult<String> {
     let (token, url) = blocking(crate::scrobble::lastfm_begin).await?;
-    open::that_detached(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?;
+    crate::media::open_url(&url).map_err(|e| AppError::Unavailable(format!("couldn't open the browser: {e}")))?; // Android: through the plugin
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;

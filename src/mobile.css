@@ -363,3 +363,18 @@ body.mobile .q-handle { display: grid; place-items: center; order: 9; width: 40p
 body.mobile .q-handle svg.i { width: 20px; height: 20px; }
 body.mobile .q-item.dragging { z-index: 5; opacity: 1 !important; background: #1d1d20 !important; border-radius: var(--r-sm); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
 body.mobile .q-actions { display: none; }
+
+/* Menus on phones: a sheet from the bottom (core.js openMenu), above a shade. */
+.menu-shade { position: fixed; inset: 0; z-index: 69; background: rgba(0, 0, 0, .45); animation: tw-fade .15s ease; }
+body.mobile .menu.menu-sheet {
+  position: fixed; z-index: 70; left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important;
+  width: auto !important; min-width: 0 !important; max-width: none !important; max-height: 75vh !important;
+  padding: 10px 8px calc(10px + var(--safe-b)) !important; border-radius: var(--r-2xl) var(--r-2xl) 0 0 !important;
+  background: var(--bg-elev-2, #1a1a1a) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border: 0 !important; box-shadow: 0 -10px 40px rgba(0, 0, 0, .5) !important;
+  animation: menu-sheet-up .22s var(--ease-out, ease);
+}
+body.mobile .menu.menu-sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 0 auto 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); }
+body.mobile .menu.menu-sheet button[role^=menuitem] { min-height: 50px; padding: 0 16px; font-size: 15.5px; border-radius: var(--r-md); }
+body.mobile .menu.menu-sheet .menu-label { padding: 10px 16px 4px; }
+@keyframes menu-sheet-up { from { transform: translateY(100%); } to { transform: none; } }

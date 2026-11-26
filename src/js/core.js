@@ -560,6 +560,16 @@ function openMenu(anchor, items, { onClose, at } = {}) {
   if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+  // Phones: a sheet from the bottom of the screen, under the thumb.
+  if (typeof isMobile !== 'undefined' && isMobile && !menu.classList.contains('sleep-pop')) {
+    menu.classList.add('menu-sheet');
+    menu.style.left = menu.style.top = '';
+    const shade = h('div', { class: 'menu-shade' });
+    shade.addEventListener('pointerdown', (e) => { e.preventDefault(); closeMenu(); });
+    document.body.insertBefore(shade, menu);
+    const prev = onClose;
+    onClose = () => { shade.remove(); prev?.(); };
+  }
   menu.onClose = onClose;
   openMenuEl = menu;
 }

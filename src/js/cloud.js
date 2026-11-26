@@ -142,13 +142,22 @@ async function cloudToken() {
 
 /** Server time (ms) as seen from here: Listen Together positions use it. */
 function serverNow() { return Date.now() + cloud.clockOffset; }
-async function syncServerClock() {
-  try {
-    const t0 = Date.now();
-    const s = await db('POST', 'rpc/server_now', {}, { anon: true });
-    const t1 = Date.now();
-    if (typeof s === 'number') cloud.clockOffset = s - (t0 + t1) / 2;
-  } catch { /* keep the last offset */ }
+// Listen together lines players up by this clock, so it's measured a few
+// times and the quickest round trip wins (its midpoint is the most exact).
+async function syncServerClock(samples = 5) {
+  let best = null;
+  for (let i = 0; i < samples; i++) {
+    try {
+      const t0 = performance.now();
+      const s = await db('POST', 'rpc/server_now', {}, { anon: true });
+      const t1 = performance.now();
+      if (typeof s !== 'number') continue;
+      const rtt = t1 - t0;
+      const offset = s - (performance.timeOrigin + (t0 + t1) / 2);
+      if (!best || rtt < best.rtt) best = { rtt, offset };
+    } catch { /* keep the last offset */ }
+  }
+  if (best) cloud.clockOffset = best.offset;
 }
 
 /** The browser sign-in behind a "Continue with Discord" button; true when signed in. */

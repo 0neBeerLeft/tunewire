@@ -3,6 +3,21 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
+## Unreleased
+
+### Listen together, rebuilt
+- **Tighter sync:** everyone hears the host within a few hundredths of a second. Small gaps close by playing a touch faster or slower (no jumps you can hear); only big ones seek
+- **Faster:** play, pause and skips reach guests over the live connection right away, and the next song is ready before it starts
+- **Same recording for everyone:** guests play the exact version the host plays, so nobody drifts because of a longer intro
+- **Pause just for you:** a guest can pause or play something else without being pulled back; "Back in sync" rejoins
+- **Shared queue:** everyone sees what's coming up and who added it
+- **Upvotes:** the song with the most votes plays next
+- **Guests control the queue** (host switch): skip, reorder and remove songs
+- **Take turns** (host switch): everyone's songs play in rotation
+- **The host left?** If the host's app disappears, the guest who's been there longest takes over after about 25 seconds
+- **Who's in sync:** the host sees each guest's sync status, with a "Resync everyone" button
+- **Back where you were:** after a restart or a dropped connection the app rejoins your session
+
 ## v2.4.1
 
 ### Fixes

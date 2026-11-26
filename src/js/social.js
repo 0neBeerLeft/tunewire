@@ -429,8 +429,19 @@ const freshJam = () => ({
   code: null, row: null, host: false, channel: null, live: null, people: [], names: new Map(),
   chat: [], suggestions: [], votes: new Map(), remote: null, remoteAt: 0, applying: false,
   quality: 'waiting', lastSig: '', timers: [], reactedAt: new Map(),
+  upvotes: new Map(),   // song key -> Set of who upvoted it
+  addedBy: new Map(),   // host: song key -> who added it to the session
+  joinedAt: new Map(),  // user id -> when they joined (ms)
+  // Guest, out of step on purpose: 'paused' (paused just here) or 'other'
+  // (playing something else). The session leaves them be until "Back in sync".
+  away: null,
+  pausedByUs: false, expectKey: null, nudge: 0, prefetched: '', lastSeek: 0, lastBroadcast: 0, lastError: 0,
+  hostGoneSince: 0, claiming: false, peopleReady: false, sharedQ: '', ticking: false, publishing: false,
 });
 let jam = freshJam();
+// The session you're in, so a restart (or a crash) brings you back to it.
+const JAM_SAVED = 'tw-jam';
+const jamWait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function jamCode() {
   const a = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -471,7 +482,7 @@ async function confirmJoinJam(code) {
   if (jam.code === code) { openJamDock(); return; }
   const ok = await confirmModal({
     title: 'Join a listening session?',
-    message: 'Your player will follow what the host plays (your current song stops). Others in the session see your Discord name. You can leave at any time.',
+    message: 'Your player will follow what the host plays (your current song and queue stop). Others in the session see your Discord name. You can leave at any time.',
     okLabel: 'Join',
   });
   if (ok) joinJam(code);
@@ -488,19 +499,24 @@ async function joinJam(code) {
   } catch (e) { toast(errMsg(e), 'error'); }
 }
 
-async function openJam(code) {
+async function openJam(code, { dock = true } = {}) {
   const [row] = await db('GET', `jams?code=eq.${code}&select=*`);
-  if (!row) throw { message: 'This session has ended' };
+  if (!row || !row.active) throw { message: 'This session has ended' };
   jam = freshJam();
   jam.code = code;
   jam.row = row;
   jam.host = row.host === me();
+  // A guest whose own song is paused: the first sync starts it, it isn't "paused for me".
+  jam.pausedByUs = true;
+  try { localStorage.setItem(JAM_SAVED, code); } catch { /* storage off */ }
+  syncServerClock(3); // everyone lines up by this clock: measure it fresh
   jam.channel = new Channel(`jam:${code}`, { private: true, presenceKey: me() });
-  jam.channel.track({ name: cloud.session.name, avatar: cloud.session.avatar || null });
+  jam.channel.track(myJamPresence());
   jam.channel.on('presence', (p) => {
     const before = jam.people.length;
     jam.people = presenceList(p);
-    for (const x of jam.people) jam.names.set(x.key, { name: x.name, avatar: x.avatar });
+    jam.peopleReady = true;
+    for (const x of jam.people) if (x.name) jam.names.set(x.key, { name: x.name, avatar: x.avatar });
     if (jam.host && jam.people.length > before) publishJamState(true);
     paintJamButton(); // people count on the button and dock; re-renders the session
   });
@@ -513,6 +529,13 @@ async function openJam(code) {
     jam.reactedAt.set(from, Date.now());
     floatReaction(m.emoji, from);
   });
+  // The host's position, many times a minute (the database copy is the backup).
+  jam.channel.on('b:st', onHostBroadcast);
+  jam.channel.on('b:resync', (m) => {
+    if (jam.host || jam.away || m?.from !== jam.row?.host) return;
+    jam.lastSeek = 0;
+    guestSync(true);
+  });
   jam.live = new Channel(`jamdb:${code}`, { changes: [
     { event: '*', schema: 'public', table: 'jams', filter: `code=eq.${code}` },
     { event: '*', schema: 'public', table: 'jam_events', filter: `code=eq.${code}` },
@@ -521,10 +544,30 @@ async function openJam(code) {
   jam.live.on('change', onJamChange);
   jam.live.on('status', (s) => { if (s === 'live') refreshJam(); });
   await refreshJam();
-  jam.timers.push(setInterval(() => { if (jam.host) publishJamState(false); else checkJamQuality(); }, 4000));
+  jam.timers.push(setInterval(jamTick, 1000));
   paintJamButton();
-  openJamDock();
+  if (dock) openJamDock();
 }
+
+/** Back into the session this app was in when it closed. */
+let jamRejoinTried = false;
+onCloudChange(() => {
+  if (jamRejoinTried || jam.code || !signedIn()) return;
+  let code = null;
+  try { code = localStorage.getItem(JAM_SAVED); } catch { /* storage off */ }
+  if (!code || !LINK_CODES.j.test(code)) return;
+  jamRejoinTried = true;
+  (async () => {
+    try {
+      await rpc('join_jam', { jam_code: code });
+      await openJam(code, { dock: false });
+      toast('You’re back in your listening session', 'ok', 3000);
+    } catch (e) {
+      // Ended, or you were removed: forget it. Offline: try at the next start.
+      if (e?.kind !== 'network' && e?.kind !== 'timeout') { try { localStorage.removeItem(JAM_SAVED); } catch { /* storage off */ } }
+    }
+  })();
+});
 
 /** Everything about the session, fetched (start, reconnect). */
 async function refreshJam() {
@@ -532,15 +575,19 @@ async function refreshJam() {
   try {
     const [[row], members, events] = await Promise.all([
       db('GET', `jams?code=eq.${jam.code}&select=*`),
-      db('GET', `jam_members?code=eq.${jam.code}&select=user_id,profiles(name,avatar)`),
-      db('GET', `jam_events?code=eq.${jam.code}&select=*&order=id.desc&limit=100`),
+      db('GET', `jam_members?code=eq.${jam.code}&select=user_id,joined_at,profiles(name,avatar)`),
+      db('GET', `jam_events?code=eq.${jam.code}&select=*&order=id.desc&limit=200`),
     ]);
     if (!row || !row.active) { endedByHost(); return; }
     if (!members.some((m) => m.user_id === me())) { removedFromJam(); return; }
-    for (const m of members) if (m.profiles) jam.names.set(m.user_id, m.profiles);
+    for (const m of members) {
+      if (m.profiles) jam.names.set(m.user_id, m.profiles);
+      jam.joinedAt.set(m.user_id, Date.parse(m.joined_at) || 0);
+    }
     jam.chat = [];
     jam.suggestions = [];
     jam.votes = new Map();
+    jam.upvotes = new Map();
     for (const e of events.reverse()) addJamEvent(e, false);
     applyJamRow(row);
   } catch { /* offline: the channel reconnects and calls this again */ }
@@ -564,17 +611,50 @@ function applyJamRow(row) {
   const wasHost = jam.host;
   jam.row = row;
   jam.host = row.host === me();
-  if (jam.host && !wasHost) { toast('You’re the host now: the session follows what you play', 'info', 3500); publishJamState(true); }
-  if (!jam.host && wasHost) toast('You handed over hosting', 'info', 2000);
-  if (!jam.host && row.state) {
-    jam.remote = row.state;
-    jam.remoteAt = row.state_at ? Date.parse(row.state_at) : serverNow();
-    applyJamState();
-  } else if (!jam.host) {
-    jam.remote = null;
-    jam.quality = 'waiting';
+  if (jam.host && !wasHost) {
+    jam.away = null;
+    setNudge(0);
+    toast('You’re the host now: the session follows what you play', 'info', 3500);
+    publishJamState(true);
   }
+  if (!jam.host && wasHost) toast('Someone else is hosting now', 'info', 2500);
+  if (!jam.host && row.state) takeRemote(row.state, row.state_at);
+  else if (!jam.host) { jam.remote = null; jam.quality = 'waiting'; }
+  shareMyQuality(false);
   paintJamButton();
+}
+
+/** Guest: the host's state, from the database (or the live channel). */
+function takeRemote(st, stateAt) {
+  if (!st || typeof st !== 'object') return;
+  // Hosts from before 2.5 don't stamp the time themselves: the server's stamp.
+  const at = typeof st.at === 'number' ? st.at : stateAt ? Date.parse(stateAt) : serverNow();
+  const cur = jam.remote;
+  if (cur?.track && st.track && cur.track.key === st.track.key && (cur.at || 0) > at) {
+    // A newer position came over the live channel: keep it, take the rest.
+    jam.remote = { ...st, playing: cur.playing, loading: cur.loading, position: cur.position, at: cur.at };
+  } else {
+    jam.remote = { ...st, at };
+  }
+  jam.remoteAt = jam.remote.at;
+  if (!jam.applying) guestSync();
+  renderTogether();
+}
+
+function onHostBroadcast(m) {
+  if (!jam.code || jam.host || !m || m.from !== jam.row?.host) return;
+  if (typeof m.position !== 'number' || typeof m.at !== 'number' || !Number.isFinite(m.position)) return;
+  const base = jam.remote || {};
+  const timing = { playing: !!m.playing, loading: !!m.loading, position: Math.max(0, m.position), at: m.at };
+  if (m.track && typeof m.track === 'object' && typeof m.track.key === 'string') {
+    // A new song: start loading it now instead of waiting for the database.
+    jam.remote = { ...base, ...timing, track: m.track, next: m.next || null };
+  } else if (base.track && m.key === base.track.key) {
+    if ((base.at || 0) > m.at) return; // older than what we have
+    jam.remote = { ...base, ...timing };
+  } else return;
+  jam.remoteAt = jam.remote.at;
+  if (!jam.applying) guestSync();
 }
 
 function nameOf(uid) {
@@ -604,8 +684,16 @@ function addJamEvent(e, live) {
   }
   if (e.kind === 'vote_skip') {
     jam.votes.set(e.user_id, e.payload?.key);
-    if (jam.host) checkSkipVotes();
+    if (jam.host && live) checkSkipVotes();
   }
+  if (e.kind === 'upvote') {
+    const k = e.payload?.key;
+    if (typeof k !== 'string' || !k) return;
+    if (!jam.upvotes.has(k)) jam.upvotes.set(k, new Set());
+    jam.upvotes.get(k).add(e.user_id);
+    if (live && jam.host) applyUpvotes();
+  }
+  if (e.kind === 'control' && live && jam.host) runQueueControl(e);
 }
 
 function updateSuggestion(rec) {
@@ -616,11 +704,104 @@ function updateSuggestion(rec) {
 
 async function answerSuggestion(e, approve) {
   try {
-    if (approve) await call('add_to_queue', { tracks: [fromCloudTrack(e.payload.track)], next: false });
+    if (approve) await addToSession(fromCloudTrack(e.payload.track), e.user_id);
     await db('PATCH', `jam_events?id=eq.${e.id}`, { status: approve ? 'approved' : 'rejected' });
     e.status = approve ? 'approved' : 'rejected';
     renderTogether();
   } catch (err) { toast(errMsg(err), 'error'); }
+}
+
+// The shared queue (host) ------------------------------------------------------------------
+
+/** Host: add a song to the session's queue; taking turns, after the songs of people with fewer turns. */
+async function addToSession(track, by) {
+  jam.addedBy.set(track.key, by);
+  await call('add_to_queue', { tracks: [track], next: false });
+  if (jam.row?.take_turns) await placeByTurns(track.key, by).catch(() => {});
+  publishJamState(true);
+}
+
+/**
+ * Taking turns: each upcoming song has a round (how many songs its adder
+ * already has ahead of it). A new song goes after the last song of a round
+ * no later than its own, so everyone's picks alternate.
+ */
+async function placeByTurns(key, by) {
+  const q = await call('get_queue');
+  const cur = q.current ?? -1;
+  const from = q.items.map((i) => i.track.key).lastIndexOf(key);
+  if (from <= cur) return;
+  const who = (i) => jam.addedBy.get(i.track.key) || jam.row?.host;
+  const counts = new Map();
+  const rounds = [];
+  for (let i = cur + 1; i < from; i++) {
+    const w = who(q.items[i]);
+    const r = counts.get(w) || 0;
+    counts.set(w, r + 1);
+    rounds.push([i, r]);
+  }
+  const mine = counts.get(by) || 0;
+  let at = cur + 1;
+  for (const [i, r] of rounds) if (r <= mine) at = i + 1;
+  if (at < from) await call('reorder_queue', { from, to: at });
+}
+
+/** Host: the most-upvoted song plays next (not while taking turns). */
+let upvoteBusy = false;
+async function applyUpvotes() {
+  if (!jam.host || jam.row?.take_turns || upvoteBusy) return;
+  upvoteBusy = true;
+  try {
+    const q = await call('get_queue');
+    const cur = q.current ?? -1;
+    const ups = q.items.slice(cur + 1);
+    const n = (i) => jam.upvotes.get(ups[i].track.key)?.size || 0;
+    let best = 0;
+    for (let i = 1; i < ups.length; i++) if (n(i) > n(best)) best = i;
+    if (best > 0) await call('reorder_queue', { from: cur + 1 + best, to: cur + 1 });
+    publishJamState(true);
+  } catch { /* the queue changed meanwhile */ }
+  upvoteBusy = false;
+}
+
+/**
+ * Host: change the queue for a guest (guest controls on) or for yourself.
+ * Songs are named by key: indexes differ between apps.
+ */
+async function runQueueControl(e, own = false) {
+  if (!own && !jam.row?.guest_controls) return;
+  const { op, key, to } = e.payload || {};
+  try {
+    if (op === 'skip') {
+      await call('next_track');
+      if (!own) toast(`${nameOf(e.user_id)} skipped the song`, 'info', 2000);
+    } else {
+      const q = await call('get_queue');
+      const cur = q.current ?? -1;
+      const idx = q.items.findIndex((it, i) => i > cur && it.track.key === key);
+      if (idx < 0) return;
+      if (op === 'remove') await call('remove_from_queue', { uid: q.items[idx].uid });
+      if (op === 'play') await call('play_index_cmd', { index: idx });
+      if (op === 'move' && Number.isInteger(to)) await call('reorder_queue', { from: idx, to: Math.min(q.items.length - 1, cur + 1 + to) });
+    }
+    publishJamState(true);
+  } catch { /* the queue changed meanwhile */ }
+}
+
+/** A queue change: done here by the host, asked for by a guest. */
+function queueControl(op, key, to) {
+  if (jam.host) { runQueueControl({ user_id: me(), payload: { op, key, to } }, true); return; }
+  db('POST', 'jam_events', { code: jam.code, kind: 'control', payload: { op, ...(key ? { key } : {}), ...(Number.isInteger(to) ? { to } : {}) } })
+    .catch((e) => toast(errMsg(e), 'error'));
+}
+
+function upvote(key) {
+  if (!jam.code || jam.upvotes.get(key)?.has(me())) return;
+  if (!jam.upvotes.has(key)) jam.upvotes.set(key, new Set());
+  jam.upvotes.get(key).add(me());
+  renderTogether();
+  db('POST', 'jam_events', { code: jam.code, kind: 'upvote', payload: { key } })
+    .catch((e) => { jam.upvotes.get(key)?.delete(me()); renderTogether(); toast(errMsg(e), 'error'); });
 }
 
 /** Guests other than the host who are here now. */
@@ -646,97 +827,294 @@ async function voteSkip() {
   try { await db('POST', 'jam_events', { code: jam.code, kind: 'vote_skip', payload: { key } }); } catch (e) { toast(errMsg(e), 'error'); }
 }
 
-function jamStateNow() {
-  const p = state.playback;
-  const t = p?.current?.track;
-  return {
-    track: t ? slimTrack(t) : null,
-    playing: p?.status === 'playing',
-    position: p?.position || 0,
-    upcoming: state.queue.items.slice((state.queue.current ?? -1) + 1, (state.queue.current ?? -1) + 6).map((i) => ({ title: i.track.title, artist: i.track.artist })),
-  };
+/** The songs coming up in the session (the host's queue). */
+function sessionUpcoming() {
+  if (jam.host) {
+    const cur = state.queue.current ?? -1;
+    return state.queue.items.slice(cur + 1, cur + 26).map((i) => ({ key: i.track.key, title: i.track.title, artist: i.track.artist, by: jam.addedBy.get(i.track.key) || null }));
+  }
+  const ups = Array.isArray(jam.remote?.upcoming) ? jam.remote.upcoming : [];
+  return ups.filter((u) => u && typeof u.title === 'string').slice(0, 25)
+    .map((u) => ({ key: typeof u.key === 'string' ? u.key : '', title: u.title, artist: typeof u.artist === 'string' ? u.artist : '', by: UUID_RE.test(u.by || '') ? u.by : null }));
 }
 
-/** Host: write the state on every real change, and every 16 s while playing (drift). */
+// Playback sync -----------------------------------------------------------------------------
+// The host publishes its song, position and the time (by the server's clock)
+// over the live channel on every change and every 2 s, and into the database
+// on every change and every 10 s (late joiners, and the host's heartbeat).
+// Guests aim at host position + time since; small gaps close by playing up
+// to 3 % faster or slower, big ones with a seek.
+
+/** The song playing, with the exact recording first (everyone plays the same audio). */
+function slimExact(t, ver) {
+  const s = slimTrack(t);
+  const i = ver?.url ? s.versions.findIndex((v) => v.url === ver.url) : -1;
+  if (i > 0) s.versions.unshift(...s.versions.splice(i, 1));
+  return s;
+}
+
+async function jamSnapshot() {
+  let p = state.playback;
+  try { p = await call('get_playback_state'); } catch { /* the last one we have */ }
+  const t = p?.current?.track;
+  const cur = state.queue.current ?? -1;
+  const next = state.queue.items[cur + 1]?.track;
+  const st = {
+    v: 2,
+    track: t ? slimExact(t, p.version) : null,
+    playing: p?.status === 'playing',
+    loading: p?.status === 'loading',
+    position: p?.position || 0,
+    at: serverNow(),
+    upcoming: sessionUpcoming().map((u) => ({ ...u, votes: jam.upvotes.get(u.key)?.size || 0 })),
+    next: next ? slimTrack(next) : null,
+  };
+  // The server keeps a state under 20 kB.
+  if (JSON.stringify(st).length > 18000) { st.upcoming = st.upcoming.slice(0, 8); st.next = null; }
+  return st;
+}
+
 let jamLastWrite = 0;
 async function publishJamState(force) {
-  if (!jam.code || !jam.host || !state.playback) return;
-  const st = jamStateNow();
-  const sig = `${st.track?.key}|${st.playing}|${st.upcoming.map((u) => u.title).join(',')}`;
-  const stale = st.playing && Date.now() - jamLastWrite > 16000;
-  if (!force && sig === jam.lastSig && !stale) return;
-  jam.lastSig = sig;
-  jamLastWrite = Date.now();
-  try { await db('PATCH', `jams?code=eq.${jam.code}`, { state: st }); } catch { jam.lastSig = ''; }
+  if (!jam.code || !jam.host || jam.publishing) return;
+  jam.publishing = true;
+  try {
+    const st = await jamSnapshot();
+    if (!jam.code || !jam.host) return;
+    const sig = `${st.track?.key}|${st.playing}|${st.loading}|${st.upcoming.map((u) => `${u.key}:${u.votes}:${u.by || ''}`).join(',')}`;
+    const changed = sig !== jam.lastSig;
+    if (changed || force) broadcastJamState(st, true);
+    else if (st.playing && Date.now() - jam.lastBroadcast > 2000) broadcastJamState(st, false);
+    if (!force && !changed && Date.now() - jamLastWrite < 10000) return;
+    jam.lastSig = sig;
+    jamLastWrite = Date.now();
+    try { await db('PATCH', `jams?code=eq.${jam.code}`, { state: st }); } catch { jam.lastSig = ''; }
+  } finally { jam.publishing = false; }
 }
+
+function broadcastJamState(st, full) {
+  jam.channel?.broadcast('st', {
+    from: me(), key: st.track?.key || null, playing: st.playing, loading: st.loading, position: st.position, at: st.at,
+    ...(full ? { track: st.track, next: st.next } : {}),
+  });
+  jam.lastBroadcast = Date.now();
+}
+
 // Host: share every real change right away.
 let jamLastPlay = '';
 function onPlaybackForJam() {
   if (!jam.code || !jam.host) return;
   const p = state.playback;
-  const sig = `${p?.current?.track?.key}|${p?.status}`;
-  if (sig !== jamLastPlay) { jamLastPlay = sig; publishJamState(true); }
+  const key = p?.current?.track?.key;
+  const sig = `${key}|${p?.status}`;
+  if (sig === jamLastPlay) return;
+  // A song that starts playing has had its upvotes.
+  if (key && !jamLastPlay.startsWith(`${key}|`)) jam.upvotes.delete(key);
+  jamLastPlay = sig;
+  publishJamState(true);
+}
+
+async function jamTick() {
+  if (!jam.code || jam.ticking) return;
+  const j = jam;
+  j.ticking = true;
+  try {
+    if (j.host) await publishJamState(false);
+    else { await guestSync(); watchHost(); }
+    shareMyQuality(false);
+  } finally { j.ticking = false; }
 }
 
 /** Where the host's song is now, by the server's clock. */
 function jamTarget() {
   const st = jam.remote;
   if (!st) return null;
-  return st.position + (st.playing ? Math.max(0, serverNow() - jam.remoteAt) / 1000 : 0);
+  return st.position + (st.playing && !st.loading ? Math.max(0, serverNow() - jam.remoteAt) / 1000 : 0);
 }
 
-async function applyJamState() {
-  const st = jam.remote;
+function setNudge(n) {
+  if (n === jam.nudge) return;
+  jam.nudge = n;
+  call('set_sync_nudge', { thousandths: n }).catch(() => {});
+}
+
+function setQuality(q) {
+  if (q === jam.quality) return;
+  jam.quality = q;
   renderTogether();
-  if (jam.applying || !st?.track) return;
-  const p = state.playback;
-  const cur = p?.current?.track?.key;
-  jam.applying = true;
-  jam.quality = 'catching';
-  try {
-    if (cur !== st.track.key) {
-      await call('play_track', { track: fromCloudTrack(st.track), platform: null });
-      // Seek once it's loaded (a few hundred ms usually).
-      for (let i = 0; i < 40; i++) {
-        await new Promise((r) => setTimeout(r, 250));
-        if (state.playback?.status === 'playing' && state.playback.current?.track?.key === st.track.key) break;
-      }
-      const now = jamTarget();
-      if (now > 2) await call('seek', { position: now });
-    } else if (st.playing && p.status !== 'playing') {
-      await call('resume');
-    } else if (!st.playing && p.status === 'playing') {
-      await call('pause');
-    }
-    const target = jamTarget();
-    if (cur === st.track.key && Math.abs((state.playback?.position || 0) - target) > 1.5) await call('seek', { position: target });
-    if (!st.playing && cur === st.track.key) await call('pause');
-  } catch { /* the next state fixes it */ }
-  jam.applying = false;
-  checkJamQuality();
 }
 
-/** Guest: how close to the host this player is. */
-function checkJamQuality() {
-  if (!jam.code || jam.host) return;
-  const prev = jam.quality;
+async function jamSeek(target) {
+  setNudge(0);
+  setQuality('catching');
+  jam.lastSeek = Date.now();
+  // A seek takes a moment to sound: aim a little ahead.
+  await call('seek', { position: Math.max(0, target + 0.15) }).catch(() => {});
+}
+
+/** Guest: follow the host. `force` resyncs even a small gap at once. */
+async function guestSync(force = false) {
+  if (!jam.code || jam.host || jam.applying) return;
   const st = jam.remote;
-  const p = state.playback;
-  if (!st?.track) jam.quality = 'waiting';
-  else if (jam.applying || p?.status === 'loading') jam.quality = 'catching';
-  else if (p?.current?.track?.key !== st.track.key || (st.playing !== (p?.status === 'playing'))) jam.quality = 'off';
-  else {
-    const d = Math.abs((p?.position || 0) - jamTarget());
-    jam.quality = d < 0.75 ? 'sync' : d < 2.5 ? 'close' : 'off';
+  if (!st?.track) { setNudge(0); setQuality('waiting'); return; }
+  let p;
+  try { p = await call('get_playback_state'); } catch { return; }
+  if (!jam.code || jam.host || jam.applying || jam.remote?.track?.key !== st.track.key) return;
+  const cur = p.current?.track?.key;
+  const busy = p.status === 'playing' || p.status === 'loading';
+  if (jam.away) {
+    // Pressed play again on the session's song: back in sync by itself.
+    if (jam.away === 'paused' && cur === st.track.key && p.status === 'playing') { jam.away = null; renderTogether(); }
+    else { setNudge(0); setQuality('away'); return; }
   }
-  // Drifted away (seeked, paused here): put it back.
-  if (jam.quality === 'off' && !jam.applying && st?.track) applyJamState();
-  if (prev !== jam.quality) renderTogether();
+  if (cur !== st.track.key) {
+    // Something else, picked here: leave them be.
+    if (cur && busy && jam.expectKey && cur !== jam.expectKey) { goAway('other'); return; }
+    if (Date.now() - jam.lastError < 5000) return;
+    await applyTrack(jam.remote);
+    return;
+  }
+  // On the session's song: anything else that starts here was picked by hand.
+  jam.expectKey = cur;
+  if (p.status === 'loading') { setQuality('catching'); return; }
+  if (p.status === 'error' || p.status === 'idle') {
+    if (Date.now() - jam.lastError < 5000) return;
+    jam.lastError = Date.now();
+    await applyTrack(jam.remote, true); // any recording, if the host's one won't play here
+    return;
+  }
+  const target = jamTarget();
+  const hostPlays = jam.remote.playing && !jam.remote.loading;
+  if (!hostPlays) {
+    setNudge(0);
+    if (p.status === 'playing') { jam.pausedByUs = true; await call('pause').catch(() => {}); }
+    if (Math.abs(p.position - target) > 0.5) await call('seek', { position: target }).catch(() => {});
+    setQuality('sync');
+    return;
+  }
+  if (p.status === 'paused') {
+    if (!jam.pausedByUs) { goAway('paused'); return; }
+    jam.pausedByUs = false;
+    await call('resume').catch(() => {});
+    if (Math.abs(p.position - target) > 1) await jamSeek(target);
+    return;
+  }
+  const d = target - p.position;
+  // Over half a second: one seek is quicker than speeding up for long.
+  if (Math.abs(d) > 0.5 || (force && Math.abs(d) > 0.25)) {
+    if (force || Date.now() - jam.lastSeek > 2500) await jamSeek(target);
+    return;
+  }
+  // Less: play up to 3 % faster or slower (not something you hear for a few
+  // seconds); stop within 20 ms, start again past 50 ms.
+  const start = jam.nudge ? 0.02 : 0.05;
+  setNudge(Math.abs(d) < start ? 0 : Math.sign(d) * Math.min(30, Math.max(8, Math.round(Math.abs(d) * 120))));
+  setQuality(Math.abs(d) < 0.12 ? 'sync' : Math.abs(d) < 0.6 ? 'close' : 'catching');
+  prefetchNext(jam.remote);
+}
+
+/** Guest: play the host's song (its exact recording, unless `any`), at the host's position. */
+async function applyTrack(st, any = false) {
+  jam.applying = true;
+  setNudge(0);
+  setQuality('catching');
+  try {
+    const track = fromCloudTrack(st.track);
+    const exact = !any ? track.versions[0] : null;
+    jam.expectKey = track.key;
+    // Only the session's song in the queue: when it ends nothing else starts here.
+    await call('clear_queue', { keepCurrent: false });
+    await call('play_track', { track: exact ? { ...track, versions: [exact] } : track, platform: exact ? exact.platform : null });
+    for (let i = 0; i < 80; i++) {
+      await jamWait(150);
+      const p = state.playback;
+      if (!jam.code || jam.host) return;
+      // An error left over from the last try doesn't count for the first moments.
+      if (p?.current?.track?.key === track.key && (['playing', 'paused'].includes(p.status) || (p.status === 'error' && i >= 10))) break;
+    }
+    if (!jam.code || jam.host || jam.remote?.track?.key !== track.key) return;
+    if (state.playback?.status === 'error') { jam.lastError = Date.now(); return; }
+    if (!jam.remote.playing || jam.remote.loading) { jam.pausedByUs = true; await call('pause'); } else jam.pausedByUs = false;
+    const now = jamTarget();
+    if (now > 1) await jamSeek(now);
+  } catch { /* the next tick tries again */ } finally { jam.applying = false; }
+}
+
+/** Guest: get the next song ready while this one plays. */
+function prefetchNext(st) {
+  const n = st?.next;
+  if (!n?.key || n.key === jam.prefetched) return;
+  jam.prefetched = n.key;
+  const t = fromCloudTrack(n);
+  call('prefetch_track', { track: t, platform: t.versions[0]?.platform ?? null }).catch(() => {});
+}
+
+function goAway(kind) {
+  jam.away = kind;
+  setNudge(0);
+  setQuality('away');
+  shareMyQuality(true);
+  renderTogether();
+}
+
+function backInSync() {
+  jam.away = null;
+  jam.pausedByUs = true;
+  jam.expectKey = null;
+  jam.lastSeek = 0;
+  jam.lastError = 0;
+  setQuality('catching');
+  shareMyQuality(true);
+  guestSync(true);
+}
+
+function myJamPresence() {
+  return { name: cloud.session.name, avatar: cloud.session.avatar || null, q: jam.host ? 'host' : jam.away ? 'away' : jam.quality === 'close' ? 'sync' : jam.quality };
+}
+/** Tell the others (the host's list) how in step this player is. */
+function shareMyQuality(force) {
+  if (!jam.channel) return;
+  const q = myJamPresence().q;
+  if (!force && q === jam.sharedQ) return;
+  jam.sharedQ = q;
+  jam.channel.track(myJamPresence());
+}
+
+/**
+ * Guest: the host's app has gone (closed, crashed, no network). After ~25 s
+ * of silence the longest-present guest takes over (then the next, 5 s later,
+ * if that one's gone too). The server checks the silence.
+ */
+function watchHost() {
+  const hostId = jam.row?.host;
+  if (!hostId || jam.claiming || !jam.peopleReady) return;
+  if (jam.people.some((p) => p.key === hostId)) { jam.hostGoneSince = 0; return; }
+  if (!jam.hostGoneSince) jam.hostGoneSince = Date.now();
+  const guests = jamGuests().map((p) => p.key)
+    .sort((a, b) => (jam.joinedAt.get(a) || 0) - (jam.joinedAt.get(b) || 0) || a.localeCompare(b));
+  const wait = 20000 + Math.max(0, guests.indexOf(me())) * 5000;
+  const seen = jam.row.host_seen ? Date.parse(jam.row.host_seen) : 0;
+  if (Date.now() - jam.hostGoneSince > wait && serverNow() - seen > wait + 5000) claimHost();
+}
+async function claimHost() {
+  const j = jam;
+  j.claiming = true;
+  try {
+    if (await rpc('jam_claim_host', { jam_code: j.code })) {
+      toast('The host left, so you’re hosting now. Add songs to keep it going.', 'info', 5000);
+      await refreshJam();
+    }
+  } catch { /* someone else was first, or the host is back */ }
+  setTimeout(() => { j.claiming = false; }, 10000);
 }
 
 function jamAdd(track) {
   if (!jam.code) return;
-  if (jam.host) { enqueue([track]); return; }
+  if (jam.host) {
+    if (jam.row?.take_turns) addToSession(track, me()).then(() => toast(`Added “${track.title}” to the session`, 'ok', 2000)).catch((e) => toast(errMsg(e), 'error'));
+    else enqueue([track]);
+    return;
+  }
   db('POST', 'jam_events', { code: jam.code, kind: 'suggest', status: 'pending', payload: { track: slimTrack(track) } })
     .then(() => toast(jam.row?.approve_adds === false ? `Added “${track.title}” to the session` : `Suggested “${track.title}”: the host decides`, 'ok', 2200))
     .catch((e) => toast(errMsg(e), 'error'));
@@ -808,9 +1186,11 @@ function removedFromJam() {
  * session before it's cleared, so they really close.
  */
 async function leaveJam({ end = false, silent = false, server = true } = {}) {
-  const { code, channel, live, timers, host } = jam;
+  const { code, channel, live, timers, host, nudge } = jam;
   for (const t of timers) clearInterval(t);
   jam = freshJam();
+  if (nudge) call('set_sync_nudge', { thousandths: 0 }).catch(() => {});
+  try { localStorage.removeItem(JAM_SAVED); } catch { /* storage off */ }
   channel?.close();
   live?.close();
   if (code && server && signedIn()) {
@@ -940,7 +1320,45 @@ const QUALITY = {
   sync: ['In sync', 'ok'],
   close: ['Almost in sync', 'ok'],
   off: ['Out of sync · fixing', 'bad'],
+  away: ['Out of step, on purpose', ''],
 };
+// How each guest is doing, from their presence (the host sees it).
+const SYNC_BADGE = { sync: ['in sync', 'ok'], catching: ['catching up', 'warn'], away: ['away', ''], waiting: ['waiting', ''] };
+
+/** A host option switch in the session panel. */
+function jamOption(label, help, field, on) {
+  const i = h('input', { type: 'checkbox', checked: on });
+  i.addEventListener('change', () => {
+    const want = i.checked;
+    db('PATCH', `jams?code=eq.${jam.code}`, { [field]: want })
+      .then(() => { jam.row = { ...jam.row, [field]: want }; renderTogether(); publishJamState(true); })
+      .catch((e) => { i.checked = !want; toast(errMsg(e), 'error'); });
+  });
+  return h('label', { class: 'setting compact' }, h('div', { class: 'label' }, label, help ? h('small', {}, help) : null), h('span', { class: 'switch' }, i, h('span')));
+}
+
+/** The session's queue: who added what, upvotes, and (host, or guests with guest controls) changes. */
+function jamQueueCard() {
+  const ups = sessionUpcoming();
+  if (!ups.length) return null;
+  const canChange = jam.host || !!jam.row?.guest_controls;
+  const votesOn = !jam.row?.take_turns;
+  return h('div', { class: 'npv-card jam-queue' },
+    h('h4', {}, jam.row?.take_turns ? 'Up next · taking turns' : 'Up next'),
+    ...ups.map((u, i) => {
+      const voters = jam.upvotes.get(u.key);
+      const mine = !!voters?.has(me());
+      const n = voters?.size || 0;
+      return h('div', { class: 'jq-row' },
+        h('div', { class: 'grow min-w-0' },
+          h('div', { class: 'jq-title' }, u.title),
+          h('div', { class: 'meta' }, [u.artist, u.by ? `added by ${nameOf(u.by)}` : null].filter(Boolean).join(' · '))),
+        votesOn && u.key ? h('button', { class: `jq-vote${mine ? ' on' : ''}`, disabled: mine, title: mine ? 'You upvoted this' : 'Upvote: the most-voted song plays next', 'aria-label': `Upvote ${u.title}${n ? `, ${n} votes` : ''}`, onclick: () => upvote(u.key) }, h('span', { html: icon('up') }), n ? String(n) : '') : null,
+        canChange && u.key ? h('button', { class: 'icon-btn small', title: 'Play now', 'aria-label': `Play ${u.title} now`, html: icon('play'), onclick: () => queueControl('play', u.key) }) : null,
+        canChange && u.key && i > 0 ? h('button', { class: 'icon-btn small', title: 'Play next', 'aria-label': `Play ${u.title} next`, html: icon('playNext'), onclick: () => queueControl('move', u.key, 0) }) : null,
+        canChange && u.key ? h('button', { class: 'icon-btn small', title: 'Remove', 'aria-label': `Remove ${u.title}`, html: icon('x'), onclick: () => queueControl('remove', u.key) }) : null);
+    }));
+}
 
 function renderTogether() {
   const box = $('#together-panel');
@@ -963,7 +1381,8 @@ function renderTogether() {
   const hostId = jam.row?.host;
   // Until presence arrives, at least show yourself.
   const people = jam.people.some((p) => p.key === me()) ? jam.people : [{ key: me(), name: cloud.session.name, avatar: cloud.session.avatar }, ...jam.people];
-  const [qText, qCls] = jam.host ? ['You control playback', 'ok'] : QUALITY[jam.quality] || QUALITY.waiting;
+  const [qText, qCls] = jam.host ? ['You control playback', 'ok']
+    : jam.away === 'paused' ? ['Paused just for you', ''] : jam.away === 'other' ? ['Playing something else', ''] : QUALITY[jam.quality] || QUALITY.waiting;
   const votes = skipVotes();
 
   const chatList = h('div', { class: 'jam-chat', role: 'log', 'aria-live': 'polite', 'aria-label': 'Session chat' },
@@ -981,23 +1400,32 @@ function renderTogether() {
     h('div', { class: 'jam-head' },
       h('div', {}, h('b', {}, jam.host ? 'You’re hosting' : `Listening with ${nameOf(hostId)}`), h('div', { class: `jam-quality ${qCls}`, role: 'status' }, h('span', { class: 'sync-dot' }), qText)),
       h('span', { class: 'meta' }, `${people.length} ${people.length === 1 ? 'person' : 'people'}`)),
+    !jam.host && jam.away ? h('div', { class: 'jam-away' },
+      h('span', {}, jam.away === 'paused' ? 'You paused: the others keep listening.' : 'You’re playing something else.'),
+      h('button', { class: 'btn small primary', onclick: backInSync }, 'Back in sync')) : null,
     h('div', { class: 'jam-people' }, ...people.map((p) => h('div', { class: 'jam-person' }, avatarEl(p.avatar, p.name), h('span', {}, p.key === me() ? `${p.name} (you)` : p.name), p.key === hostId ? h('em', {}, 'host') : null,
+      p.key !== hostId && p.key !== me() && SYNC_BADGE[p.q] ? h('small', { class: `jam-badge ${SYNC_BADGE[p.q][1]}` }, SYNC_BADGE[p.q][0]) : null,
       jam.host && p.key !== me() ? h('button', { class: 'icon-btn small', title: `Options for ${p.name}`, html: icon('dots'), onclick: (e) => openMenu(e.currentTarget, [
         { label: 'Make host', icon: 'user', onClick: () => handOff(p.key) },
         { label: 'Remove from session', icon: 'x', onClick: () => kick(p.key) }]) }) : null))),
     h('div', { class: 'actions' },
       h('button', { class: 'btn small', html: `${icon('link')}Copy invite link`, onclick: () => { copyText(JAM_LINK(jam.code)); toast('Invite link copied', 'ok', 1500); } }),
+      jam.host ? h('button', { class: 'btn small', html: `${icon('refresh')}Resync everyone`, title: 'Bring every guest back to your exact position', onclick: () => { jam.channel?.broadcast('resync', { from: me() }); publishJamState(true); toast('Resyncing everyone', 'ok', 1500); } }) : null,
       jam.host
         ? h('button', { class: 'btn small danger-ghost', onclick: (e) => hostLeaveMenu(e.currentTarget) }, 'End or hand over')
         : h('button', { class: 'btn small danger-ghost', onclick: () => leaveJam() }, 'Leave')),
-    jam.host ? h('label', { class: 'setting compact' }, h('div', { class: 'label' }, 'Approve suggested songs'),
-      (() => { const i = h('input', { type: 'checkbox', checked: jam.row?.approve_adds !== false }); i.addEventListener('change', () => db('PATCH', `jams?code=eq.${jam.code}`, { approve_adds: i.checked }).catch((e) => toast(errMsg(e), 'error'))); return h('span', { class: 'switch' }, i, h('span')); })()) : null,
+    jam.host ? h('div', { class: 'jam-options' },
+      jamOption('Approve suggested songs', null, 'approve_adds', jam.row?.approve_adds !== false),
+      jamOption('Guests control the queue', 'Skip, reorder and remove songs', 'guest_controls', !!jam.row?.guest_controls),
+      jamOption('Take turns', 'Everyone’s songs play in rotation', 'take_turns', !!jam.row?.take_turns)) : null,
     !jam.host && st?.track ? h('div', { class: 'npv-card' }, h('h4', {}, 'Now playing'), h('div', { class: 'npv-source' }, `${st.track.title} — ${st.track.artist}`),
       h('div', { class: 'actions mt-8' },
-        h('button', { class: 'btn small', disabled: votes.n && jam.votes.get(me()) === votes.key, onclick: voteSkip }, jam.votes.get(me()) === votes.key ? 'You voted to skip' : 'Vote to skip'),
-        votes.n ? h('span', { class: 'meta' }, `${votes.n} of ${votes.need} votes`) : null)) : null,
+        jam.row?.guest_controls
+          ? h('button', { class: 'btn small', html: `${icon('next')}Skip`, onclick: () => queueControl('skip') })
+          : h('button', { class: 'btn small', disabled: votes.n && jam.votes.get(me()) === votes.key, onclick: voteSkip }, jam.votes.get(me()) === votes.key ? 'You voted to skip' : 'Vote to skip'),
+        !jam.row?.guest_controls && votes.n ? h('span', { class: 'meta' }, `${votes.n} of ${votes.need} votes`) : null)) : null,
     jam.host && votes.n ? h('div', { class: 'meta' }, `${votes.n} of ${votes.need} votes to skip this song`) : null,
-    !jam.host && st?.upcoming?.length ? h('div', { class: 'npv-card' }, h('h4', {}, 'Up next'), h('div', { class: 'npv-source' }, ...st.upcoming.map((u) => h('div', {}, `${u.title} — ${u.artist}`)))) : null,
+    jamQueueCard(),
     jam.host && pending.length ? h('div', { class: 'npv-card' }, h('h4', {}, `Suggestions (${pending.length})`),
       ...pending.map((s) => h('div', { class: 'suggestion' },
         h('div', { class: 'grow' }, h('b', {}, s.payload?.track?.title || 'Song'), h('div', { class: 'meta' }, `${s.payload?.track?.artist || ''} · from ${nameOf(s.user_id)}`)),

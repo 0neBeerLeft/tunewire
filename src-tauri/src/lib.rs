@@ -409,6 +409,7 @@ pub fn run() {
             library::load_sync_state,
             library::save_sync_state,
             playback::set_sleep_timer,
+            playback::set_sync_nudge,
             commands::queue::set_shuffle,
             commands::cloud::cloud_config,
             commands::cloud::cloud_session,

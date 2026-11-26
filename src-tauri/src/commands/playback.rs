@@ -250,6 +250,13 @@ pub fn start_radio(app: AppHandle, st: State<'_, AppState>, track: Track) {
 
 /// Warm up the stream for a song the user is likely to play (hover, top
 /// result). False when it was skipped (busy): the page may ask again.
+/// Listen together: play slightly faster (+) or slower (-), in thousandths
+/// (at most 3 %), to drift back in step with the host. 0 = normal speed.
+#[tauri::command]
+pub fn set_sync_nudge(thousandths: i32) {
+    crate::audio::set_rate_nudge(thousandths);
+}
+
 #[tauri::command]
 pub fn prefetch_track(app: AppHandle, track: Track, platform: Option<crate::models::Platform>) -> bool {
     crate::controller::prefetch(&app, track, platform)

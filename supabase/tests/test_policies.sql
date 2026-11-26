@@ -352,3 +352,35 @@ select tests.check(tests.count('select 1 from now_playing') = 1, 'sharing rules 
 select tests.act(:G, true);
 select tests.check(tests.count($$select 1 from profiles where id = '00000000-0000-0000-0000-00000000000a'$$) = 1, 'guests see owner names');
 reset role;
+
+-- H2: Listen together v2 -----------------------------------------------------------------------
+select tests.act(:A);
+select tests.check(open_jam('roomv2abcd', false, '', false) = 'roomv2abcd', 'v2: host opens a session');
+select tests.act(:B);
+select join_jam('roomv2abcd');
+insert into jam_events (code, kind, payload) values ('roomv2abcd', 'upvote', '{"key":"a::one","x":1}');
+select tests.check((select payload from jam_events where code = 'roomv2abcd' and kind = 'upvote') = '{"key": "a::one"}', 'upvote payload trimmed');
+insert into jam_events (code, kind, payload) values ('roomv2abcd', 'control', '{"op":"move","key":"a::one","to":3,"junk":true}');
+select tests.check((select payload from jam_events where code = 'roomv2abcd' and kind = 'control') = '{"key": "a::one", "op": "move", "to": 3}', 'control payload trimmed');
+select tests.fails($$insert into jam_events (code, kind, payload) values ('roomv2abcd', 'control', '{"op":"nuke"}')$$, 'unknown control');
+-- Only the host sets the options, and a present host can't be replaced.
+update jams set guest_controls = true where code = 'roomv2abcd';
+select tests.check((select not guest_controls from jams where code = 'roomv2abcd'), 'only the host turns on guest controls');
+select tests.fails($$update jams set host_seen = now() - interval '1 hour' where code = 'roomv2abcd'$$, 'permission denied');
+select tests.check(not jam_claim_host('roomv2abcd'), 'nobody takes over from a present host');
+select tests.act(:A);
+update jams set guest_controls = true, take_turns = true where code = 'roomv2abcd';
+select tests.check((select guest_controls and take_turns from jams where code = 'roomv2abcd'), 'host sets the options');
+-- The host goes quiet: a member takes over, an outsider can't.
+select tests.act(null);
+reset role;
+update jams set host_seen = now() - interval '1 minute' where code = 'roomv2abcd';
+select tests.act(:C);
+select tests.check(not jam_claim_host('roomv2abcd'), 'outsiders cannot take over');
+select tests.act(:B);
+select tests.check(jam_claim_host('roomv2abcd'), 'a member takes over from a silent host');
+select tests.act(:A);
+select tests.check(not jam_claim_host('roomv2abcd'), 'the old host cannot take it straight back');
+update jams set state = '{"track":{"key":"evil"}}' where code = 'roomv2abcd';
+select tests.check((select state is null from jams where code = 'roomv2abcd'), 'the old host no longer controls playback');
+reset role;

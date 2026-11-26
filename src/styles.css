@@ -1401,6 +1401,21 @@ body.dragging-tracks .track:hover { background: transparent; }
 .jam-person { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .jam-person em { font-style: normal; font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: var(--r-sm); padding: 0 6px; }
 .jam-hint { font-size: 12.5px; line-height: 1.5; }
+.jam-person > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jam-badge { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--text-dim); white-space: nowrap; }
+.jam-badge.ok { color: var(--ok); }
+.jam-badge.warn { color: var(--warn); }
+.jam-away { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 13px; }
+.jam-away span { flex: 1; min-width: 0; }
+.jam-options { display: flex; flex-direction: column; }
+.jam-queue { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; }
+.jq-row { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 2px 10px 2px 16px; }
+.jq-title { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jq-row .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jq-vote { display: inline-flex; align-items: center; gap: 2px; height: 28px; min-width: 34px; padding: 0 8px; border-radius: var(--r-lg); background: var(--bg-elev-2); color: var(--text-dim); font-size: 12px; font-weight: 600; }
+.jq-vote svg.i { width: 14px; height: 14px; }
+.jq-vote:hover:not(:disabled) { color: var(--text); }
+.jq-vote.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); cursor: default; }
 .reactions-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .reactions-bar button { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-elev-2); font-size: 20px; }
 .reactions-bar button:hover { background: var(--selected); }

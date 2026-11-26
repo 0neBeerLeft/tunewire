@@ -16,7 +16,7 @@
 
 use crate::sync_ext::LockExt;
 use std::num::NonZero;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -31,6 +31,68 @@ use crate::error::{AppError, AppResult};
 use crate::stream::{OpenedStream, Shared};
 
 const CHUNK_FRAMES: usize = 2048;
+
+/// Listen together: play a touch faster (+) or slower (-), in thousandths,
+/// to close a small gap with the host without a jump you'd hear. 0 = normal.
+static RATE_NUDGE: AtomicI32 = AtomicI32::new(0);
+/// The largest nudge: 3 % (about half a semitone, held only for seconds).
+pub const MAX_NUDGE: i32 = 30;
+
+pub fn set_rate_nudge(thousandths: i32) {
+    RATE_NUDGE.store(thousandths.clamp(-MAX_NUDGE, MAX_NUDGE), Ordering::Relaxed);
+}
+
+/// Resamples chunks by a ratio near 1 (linear interpolation), carrying the
+/// fractional position and the last frame across chunks so the seams don't
+/// click.
+struct Stretch {
+    phase: f64,
+    prev: Vec<f32>,
+}
+
+impl Stretch {
+    fn new(channels: usize) -> Self {
+        Stretch { phase: 0.0, prev: vec![0.0; channels] }
+    }
+
+    /// `input` played at `ratio` (> 1 faster). Frame 0 of the virtual
+    /// sequence is the previous chunk's last frame.
+    fn apply(&mut self, input: &[f32], ch: usize, ratio: f64) -> Vec<f32> {
+        let n = input.len() / ch;
+        if n == 0 {
+            return Vec::new();
+        }
+        let frame = |i: usize| -> &[f32] {
+            if i == 0 {
+                &self.prev[..]
+            } else {
+                &input[(i - 1) * ch..i * ch]
+            }
+        };
+        let mut out = Vec::with_capacity(((n as f64 / ratio) as usize + 2) * ch);
+        let mut t = self.phase;
+        while t < n as f64 {
+            let i = t as usize;
+            let f = (t - i as f64) as f32;
+            let (a, b) = (frame(i), frame(i + 1));
+            for c in 0..ch {
+                out.push(a[c] + (b[c] - a[c]) * f);
+            }
+            t += ratio;
+        }
+        self.phase = t - n as f64;
+        self.prev.copy_from_slice(&input[(n - 1) * ch..n * ch]);
+        out
+    }
+
+    /// Not stretching: remember the seam for when a nudge starts.
+    fn pass(&mut self, input: &[f32], ch: usize) {
+        self.phase = 0.0;
+        if input.len() >= ch {
+            self.prev.copy_from_slice(&input[input.len() - ch..]);
+        }
+    }
+}
 /// ~3 s of audio at 48 kHz stereo.
 const CHANNEL_CHUNKS: usize = 72;
 
@@ -259,6 +321,7 @@ struct FeedSource {
     limiter: Limiter,
     /// The end-of-stream marker arrived; `cur` holds the limiter's tail.
     ending: bool,
+    stretch: Stretch,
 }
 
 impl FeedSource {
@@ -360,6 +423,25 @@ impl Iterator for FeedSource {
                     self.refresh_target();
                     let mut samples = c.samples;
                     self.process(&mut samples);
+                    let ch = self.ctl.channels as usize;
+                    let nudge = RATE_NUDGE.load(Ordering::Relaxed);
+                    if nudge != 0 {
+                        let out = self.stretch.apply(&samples, ch, 1.0 + nudge as f64 / 1000.0);
+                        // Position counts song time: credit the frames
+                        // skipped (faster) or played twice (slower).
+                        let (inn, outn) = (samples.len() as u64, out.len() as u64);
+                        if inn > outn {
+                            self.ctl.played.fetch_add(inn - outn, Ordering::Relaxed);
+                        } else {
+                            let d = outn - inn;
+                            // Only this thread writes `played`.
+                            let p = self.ctl.played.load(Ordering::Relaxed);
+                            self.ctl.played.store(p.saturating_sub(d), Ordering::Relaxed);
+                        }
+                        samples = out;
+                    } else {
+                        self.stretch.pass(&samples, ch);
+                    }
                     self.cur = samples;
                     self.cur_epoch = c.epoch;
                     self.idx = 0;
@@ -569,6 +651,7 @@ fn start_decoding(t: LoadedTrack, normalize: Arc<AtomicBool>, eq_params: Arc<EqP
         eq_params,
         limiter: Limiter::new(rate, channels),
         ending: false,
+        stretch: Stretch::new(channels as usize),
     };
     Prepared { token, ctl, shared, duration, feed, drained }
 }
@@ -937,6 +1020,25 @@ mod tests {
 
     /// Audio buffered before a seek must not play after it: the very next
     /// sound is from the new position (each second here has its own level).
+    #[test]
+    fn stretch_keeps_length_and_continuity() {
+        // A slow ramp, stereo: faster drops frames, slower adds them, and the
+        // signal stays continuous across chunk seams.
+        let ch = 2;
+        let input: Vec<f32> = (0..4096).flat_map(|i| [i as f32, i as f32]).collect();
+        for (ratio, lo, hi) in [(1.03, 3960, 3990), (0.97, 4210, 4240), (1.0, 4095, 4097)] {
+            let mut s = super::Stretch::new(ch);
+            let mut out = Vec::new();
+            for c in input.chunks(2048 * ch) {
+                out.extend(s.apply(c, ch, ratio));
+            }
+            let frames = out.len() / ch;
+            assert!((lo..=hi).contains(&frames), "ratio {ratio}: {frames} frames");
+            let max_step = out.chunks(ch).collect::<Vec<_>>().windows(2).map(|w| (w[1][0] - w[0][0]).abs()).fold(0.0f32, f32::max);
+            assert!(max_step <= (ratio as f32) + 0.01, "ratio {ratio}: jump {max_step}");
+        }
+    }
+
     #[test]
     fn seek_drops_buffered_audio_at_once() {
         use super::*;

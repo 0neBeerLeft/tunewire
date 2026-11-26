@@ -58,6 +58,8 @@ jobs:
         run: deno run --allow-read scripts/check-frontend.ts
       - name: Playlist sync arithmetic
         run: deno test --allow-read scripts/syncops_test.ts
+      - name: Listen together logic
+        run: node scripts/jam_test.mjs
       - name: Edge Functions
         run: |
           deno check supabase/functions/report/index.ts supabase/functions/share/index.ts

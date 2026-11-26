@@ -74,10 +74,42 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
   new MutationObserver(syncFull).observe(app, { attributes: true, attributeFilter: ['class'] });
   for (const b of $$('.panel-tabs button')) b.addEventListener('click', () => setTimeout(syncFull, 0));
   syncFull();
-  // Android's back gesture: close a sheet first.
+  // Android's back gesture. The WebView goes back in the page's history,
+  // and with none it closes the app: so while there's something to go back
+  // from (a menu, a dialog, the Library sheet, the full player, an earlier
+  // page) the page keeps one history step, and Back undoes the top thing.
+  // On the home page with nothing open, Back leaves the app as usual.
+  const fullLyricsOpen = () => typeof fullLyrics !== 'undefined' && fullLyrics.open;
+  const backTarget = () => {
+    if (openMenuEl) return closeMenu;
+    if (modalStack.length) {
+      const top = modalStack[modalStack.length - 1];
+      return top.closable === false ? null : top.close;
+    }
+    if (fullLyricsOpen()) return closeFullLyrics;
+    if (document.querySelector('.wrapped')) return () => document.querySelector('.wrapped .w-close')?.click();
+    if (document.body.classList.contains('lib-open')) return () => { document.body.classList.remove('lib-open'); mark(views.has(state.view) ? state.view : ''); };
+    if (typeof panelOpen === 'function' && panelOpen()) return () => setPanelOpen(false);
+    if (navStack.length) return goBack;
+    if (state.view !== 'home') return () => showView('home', { push: false });
+    return null;
+  };
+  let armed = false;
+  const arm = () => {
+    if (!armed && backTarget()) {
+      history.pushState({ tw: 'back' }, '');
+      armed = true;
+    }
+  };
   window.addEventListener('popstate', () => {
-    if (document.body.classList.contains('lib-open')) document.body.classList.remove('lib-open');
+    armed = false;
+    backTarget()?.();
+    setTimeout(arm, 0);
   });
+  // Anything that may add something to go back from: dialogs and menus
+  // (added to <body>), the sheets and pages (classes), a click.
+  new MutationObserver(() => setTimeout(arm, 0)).observe(document.body, { childList: true, attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('click', () => setTimeout(arm, 0), true);
 
   // Keep the active tab in step with the page shown.
   const views = new Set(tabs.map((t) => t.id));

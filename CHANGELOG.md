@@ -3,7 +3,7 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## Unreleased
+## v2.4.0
 
 **Songs start much faster**
 - A YouTube song starts in about half a second instead of about 3 seconds: Tunewire now asks YouTube for the audio itself instead of starting yt-dlp for every song (yt-dlp stays as the fallback)

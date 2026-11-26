@@ -356,3 +356,10 @@ body.mobile .suggest .suggest-item { min-height: 44px; }
    their swipe to themselves. */
 body.mobile .main .view { overflow-x: hidden !important; }
 body.mobile .settings-nav, body.mobile .search-chips, body.mobile .profile-tabs, body.mobile .card-row, body.mobile .lib-chips { overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+
+/* Queue: a grip on each upcoming song to drag it (see mobile.js). */
+body.mobile .q-item { position: relative; grid-template-columns: 36px minmax(0, 1fr) 40px; }
+body.mobile .q-handle { display: grid; place-items: center; order: 9; width: 40px; height: 44px; color: var(--text-faint); touch-action: none; }
+body.mobile .q-handle svg.i { width: 20px; height: 20px; }
+body.mobile .q-item.dragging { z-index: 5; opacity: 1 !important; background: #1d1d20 !important; border-radius: var(--r-sm); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+body.mobile .q-actions { display: none; }

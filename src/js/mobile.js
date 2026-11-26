@@ -178,3 +178,40 @@ let androidUpdateCheck = null;
   setTimeout(auto, 8000);
   setInterval(auto, 6 * 3600 * 1000);
 })();
+
+// Reordering the queue with a finger: hold the grip at a song's right edge
+// and drag it up or down (the desktop's drag and drop needs a mouse).
+(function touchQueueReorder() {
+  if (!isMobile) return;
+  const list = $('#queue-list');
+  if (!list) return;
+  let drag = null;
+  list.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.q-handle');
+    const el = handle?.closest('.q-item');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    drag = { el, from: Number(el.dataset.index), y0: e.clientY, dy: 0, h: el.getBoundingClientRect().height || 56 };
+    el.classList.add('dragging');
+  });
+  list.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    drag.dy = e.clientY - drag.y0;
+    drag.el.style.transform = `translateY(${drag.dy}px)`;
+  });
+  const end = () => {
+    if (!drag) return;
+    const { el, from, dy, h } = drag;
+    drag = null;
+    el.style.transform = '';
+    el.classList.remove('dragging');
+    const steps = Math.round(dy / h);
+    if (steps) moveQueue(from, Math.max(0, Math.min(state.queue.items.length - 1, from + steps)));
+  };
+  list.addEventListener('pointerup', end);
+  list.addEventListener('pointercancel', end);
+  // A tap on the grip shouldn't also play the song.
+  list.addEventListener('click', (e) => { if (e.target.closest('.q-handle')) e.stopPropagation(); }, true);
+})();

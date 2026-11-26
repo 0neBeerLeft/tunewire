@@ -88,6 +88,7 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
     }
     if (fullLyricsOpen()) return closeFullLyrics;
     if (document.querySelector('.wrapped')) return () => document.querySelector('.wrapped .w-close')?.click();
+    if ($('#app').classList.contains('jam-open') && !$('#jam-dock')?.hidden && typeof closeJamDock === 'function') return closeJamDock;
     if (document.body.classList.contains('lib-open')) return () => { document.body.classList.remove('lib-open'); mark(views.has(state.view) ? state.view : ''); };
     if (typeof panelOpen === 'function' && panelOpen()) return () => setPanelOpen(false);
     if (navStack.length) return goBack;

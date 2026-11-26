@@ -62,7 +62,7 @@ body.mobile .queue {
 body.mobile .app:not(.queue-hidden) .queue, body.mobile .app.queue-open .queue { transform: none; visibility: visible; transition: transform .28s var(--ease-out, ease); }
 /* The mini player and the tabs stay on top of the sheets. */
 body.mobile .player-bar, body.mobile .mobile-nav { position: relative; z-index: 50; }
-body.mobile .jam-side { position: fixed !important; inset: var(--safe-t) 0 0 0 !important; width: auto !important; z-index: 46; margin: 0 !important; border-radius: 0 !important; }
+body.mobile .jam-side { position: fixed !important; inset: var(--safe-t) 0 calc(var(--mini-h) + var(--mnav-h) + var(--safe-b)) 0 !important; width: auto !important; z-index: 46; margin: 0 !important; border-radius: 0 !important; }
 
 /* ---- mini player ----------------------------------------------------------- */
 body.mobile .player-bar {
@@ -138,7 +138,10 @@ body.mobile .track { min-height: 58px; }
 body.mobile .cards, body.mobile .card-grid, body.mobile .shelf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 body.mobile .page-title, body.mobile h1 { font-size: 28px !important; }
 body.mobile .hero, body.mobile .mix-banner { flex-direction: column !important; align-items: flex-start !important; }
-body.mobile .modal { width: calc(100vw - 24px) !important; max-width: none !important; max-height: calc(100vh - 48px); }
+/* Dialogs: 12 px from each edge (the backdrop's 24 px padding plus a
+   100vw-wide dialog pushed it off the right edge), above the system bars. */
+body.mobile .modal-backdrop { padding: calc(12px + var(--safe-t)) 12px calc(12px + var(--safe-b)) !important; }
+body.mobile .modal { width: 100% !important; max-width: none !important; max-height: calc(100vh - 24px - var(--safe-t) - var(--safe-b)); }
 body.mobile .toasts { bottom: calc(var(--mnav-h) + var(--mini-h) + var(--safe-b) + 8px); }
 /* Hovers don't exist on touch: show what hover would reveal. */
 body.mobile .track .row-actions, body.mobile .track .more { opacity: 1 !important; }
@@ -338,3 +341,7 @@ body.mobile .queue-head #btn-sleep { display: grid !important; position: relativ
 /* Wrapped: the progress bars and close button below the status bar. */
 body.mobile .wrapped .w-bars { top: calc(14px + var(--safe-t)); }
 body.mobile .wrapped .w-close { top: calc(28px + var(--safe-t)); right: 16px; }
+
+/* The Listen together session: a solid sheet (its glass showed the page
+   behind it, blurred, on a phone). */
+body.mobile .jam-side { background: var(--panel-solid, #0d0d0d) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }

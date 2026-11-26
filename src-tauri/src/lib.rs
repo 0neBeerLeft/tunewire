@@ -412,6 +412,7 @@ pub fn run() {
             commands::queue::set_shuffle,
             commands::cloud::cloud_config,
             commands::cloud::cloud_session,
+            commands::cloud::cloud_moved,
             commands::cloud::cloud_sign_in,
             commands::cloud::cloud_sign_out,
             commands::cloud::cloud_prepare_restart,

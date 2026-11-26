@@ -7,6 +7,7 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 ### Fixes
 - After the move to Tunewire's own server, an app that still held a sign-in from the old server sent it to the new one and was refused, so shared playlists showed "Offline". A sign-in is now only reused on the server that issued it.
+- Anyone still signed in from the old server is signed out once, with a note saying why, so they sign in again cleanly on the new one.
 
 ### Android
 - Your Library on phones: the shortcuts are one row you swipe, so your playlists get the screen; bigger rows.

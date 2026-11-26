@@ -12,6 +12,10 @@ async function cloudInit() {
   try { cloud.cfg = await call('cloud_config'); } catch { cloud.cfg = null; }
   if (cloud.cfg) {
     try { cloud.session = await call('cloud_session'); } catch (e) { cloud.session = null; retrySession(e); }
+    // Signed out because Tunewire moved to its own server: say why, once.
+    if (!cloud.session && await call('cloud_moved').catch(() => false)) {
+      setTimeout(() => toast('Tunewire moved to its own server, so you were signed out once. Sign in again to get your playlists and friends back.', 'info', 12000), 1500);
+    }
     await loadProfileName();
     syncServerClock();
   }

@@ -117,12 +117,33 @@ static OVERRIDE: Mutex<Option<CloudConfig>> = Mutex::new(None);
 static FROZEN: AtomicBool = AtomicBool::new(false);
 static FALLBACK_FILE: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
 
+/// This start signed out a sign-in from the old server (see `init`).
+static MOVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True once after `init` signed out a sign-in from another server.
+pub fn take_moved() -> bool {
+    MOVED.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
 pub fn init(dir: &std::path::Path, settings_url: &str, settings_key: &str) {
     *FALLBACK_FILE.locked() = Some(dir.join("cloud_session"));
     // Development only: in a release, settings (which the page can change)
     // must never be able to send the sign-in token to another server.
     if cfg!(debug_assertions) && !settings_url.is_empty() && !settings_key.is_empty() {
         *OVERRIDE.locked() = Some(CloudConfig { url: settings_url.trim_end_matches('/').to_string(), anon_key: settings_key.to_string(), share_url: share_url() });
+    }
+    // Signed in on another server (Supabase cloud, before Tunewire moved to
+    // its own in 2.4.0): sign out once, so the next sign-in is a clean one
+    // on this server. Apps from before this marker existed count as moved.
+    if let Some(server) = config().map(|c| c.url) {
+        let marker = dir.join("cloud_server");
+        if std::fs::read_to_string(&marker).unwrap_or_default().trim() != server {
+            if load_stored().is_some() {
+                clear_refresh();
+                MOVED.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            let _ = std::fs::write(&marker, &server);
+        }
     }
 }
 

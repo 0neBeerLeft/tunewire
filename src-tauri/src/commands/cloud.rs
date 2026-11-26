@@ -14,6 +14,12 @@ pub fn cloud_config() -> Option<CloudConfig> {
     cloud::config()
 }
 
+/// True once when this start signed out a sign-in from the old server.
+#[tauri::command]
+pub fn cloud_moved() -> bool {
+    cloud::take_moved()
+}
+
 #[tauri::command]
 pub async fn cloud_session() -> AppResult<Option<CloudSession>> {
     blocking(cloud::session_blocking).await

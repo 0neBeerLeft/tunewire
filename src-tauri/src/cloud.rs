@@ -152,10 +152,18 @@ struct Stored {
 // copy (a keychain write failed), is read first, and is removed once the
 // keychain takes a write again. The session itself (a short-lived access
 // token, too big for some keychains) goes in a private file, tagged with the
-// refresh token it belongs to.
+// refresh token it belongs to and the server that issued it: an access token
+// from another server (the app moved from Supabase cloud to its own server
+// in 2.4.0) is refused there, so it isn't reused; a refresh asks the
+// current server for one of its own.
 fn token_tag(refresh: &str) -> String {
     use sha2::{Digest, Sha256};
-    Sha256::digest(refresh.trim().as_bytes()).iter().take(12).map(|b| format!("{b:02x}")).collect()
+    let server = config().map(|c| c.url).unwrap_or_default();
+    let mut h = Sha256::new();
+    h.update(server.as_bytes());
+    h.update(b"\n");
+    h.update(refresh.trim().as_bytes());
+    h.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
 }
 
 fn session_file() -> Option<std::path::PathBuf> {

@@ -5,6 +5,9 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 
 ## Unreleased
 
+### Fixes
+- After the move to Tunewire's own server, an app that still held a sign-in from the old server sent it to the new one and was refused, so shared playlists showed "Offline". A sign-in is now only reused on the server that issued it.
+
 ### Android
 - Your Library on phones: the shortcuts are one row you swipe, so your playlists get the screen; bigger rows.
 - Home's Recently played shows song titles again.

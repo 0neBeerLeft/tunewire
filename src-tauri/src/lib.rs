@@ -515,6 +515,13 @@ pub fn run() {
                 if let Some(st) = app.try_state::<AppState>() {
                     st.save_all_now();
                 }
+                // Android: everything is saved, so leave now. The normal exit
+                // runs C++ cleanup that can crash in the graphics driver
+                // (seen on the emulator) and shows "Tunewire has stopped".
+                #[cfg(target_os = "android")]
+                unsafe {
+                    libc::_exit(0)
+                }
             }
         });
 }

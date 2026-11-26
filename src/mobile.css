@@ -134,6 +134,9 @@ body.mobile .mobile-nav button:active { transform: scale(.94); }
 body.mobile .icon-btn { min-width: 40px; min-height: 40px; }
 body.mobile .track, body.mobile .table-head { grid-template-columns: 28px minmax(0, 1fr) 44px !important; }
 body.mobile .track > :nth-child(n+4):not(:last-child), body.mobile .table-head > :nth-child(n+4):not(:last-child) { display: none !important; }
+/* Home's Recently played hides the number: the title takes its place. */
+body.mobile .home-recent .track { grid-template-columns: minmax(0, 1fr) 44px !important; }
+body.mobile .home-recent .t-more { opacity: 1; }
 body.mobile .track { min-height: 58px; }
 body.mobile .cards, body.mobile .card-grid, body.mobile .shelf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 body.mobile .page-title, body.mobile h1 { font-size: 28px !important; }

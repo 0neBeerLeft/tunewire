@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android",
+  "description": "Android only: the lock screen / notification / headset buttons reach the page (media-android plugin events).",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "android"
+  ],
+  "permissions": [
+    "media-android:allow-register-listener",
+    "media-android:allow-remove-listener"
+  ]
+}

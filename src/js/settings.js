@@ -13,7 +13,7 @@ async function updateSettings(patch) {
 /** Android has no tray, output picker, spotDL, Discord client, system yt-dlp
  *  or keyboard: these settings don't show there. */
 const ANDROID = /Android/i.test(navigator.userAgent);
-const ANDROID_HIDDEN = new Set(['Close to tray', 'Output device', 'spotDL (optional fallback)', 'Spotify app credentials (spotDL)', 'yt-dlp copy', 'Keyboard shortcuts']);
+const ANDROID_HIDDEN = new Set(['Download folder', 'Music folders', 'Close to tray', 'Output device', 'spotDL (optional fallback)', 'Spotify app credentials (spotDL)', 'yt-dlp copy', 'Keyboard shortcuts']);
 const hiddenHere = (label) => ANDROID && ANDROID_HIDDEN.has(label);
 
 function settingToggle(label, help, key) {
@@ -60,6 +60,7 @@ const groupId = (title) => `set-${title.toLowerCase().replace(/[^a-z]+/g, '-').r
 
 function group(title, brand, ...rows) {
   if (ANDROID && title === 'Discord') return null; // Rich Presence needs the Discord desktop app
+  if (!rows.some(Boolean)) return null; // every row left out here
   const ico = brand ? plogo(brand) : icon(GROUP_ICONS[title] || 'sliders');
   return h('section', { class: `group settings-card ${brand || ''}`, id: groupId(title), 'data-title': title },
     h('h2', { html: `<span class="sc-ico">${ico}</span><span>${esc(title)}</span>` }), h('div', { class: 'sc-rows' }, ...rows));

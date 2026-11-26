@@ -26,7 +26,8 @@ $('#nav-menu').addEventListener('click', (e) => openMenu(e.currentTarget, [
   'sep',
   { label: 'Import playlists', icon: 'importIcon', onClick: () => openImport() },
   { label: 'Downloads', icon: 'download', onClick: () => showView('downloads') },
-  { label: 'Local files', icon: 'folder', onClick: () => showView('local') },
+  // Android can't pick music folders (its file picker chooses files only).
+  /Android/i.test(navigator.userAgent) ? null : { label: 'Local files', icon: 'folder', onClick: () => showView('local') },
   'sep',
   // Phones have no keyboard shortcuts.
   isMobile ? null : { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: showShortcuts },

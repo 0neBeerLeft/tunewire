@@ -132,7 +132,7 @@ pub fn stream(id: &str, visitor: &str) -> AppResult<StreamInfo> {
     let thumbnail = pr.pointer("/videoDetails/thumbnail/thumbnails").and_then(Value::as_array).and_then(|t| t.last()).and_then(|t| t.get("url")).and_then(Value::as_str).map(str::to_string);
     Ok(StreamInfo {
         url,
-        ext: Some("mp4".into()),
+        ext: Some("aac".into()), // packed audio: AAC frames (ADTS), not an MP4 file
         acodec: Some("mp4a.40.2".into()),
         protocol: Some("m3u8_native".into()),
         duration: d("/videoDetails/lengthSeconds").and_then(|s| s.parse().ok()),

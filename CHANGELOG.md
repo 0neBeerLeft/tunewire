@@ -3,7 +3,7 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
-## Unreleased
+## v2.4.1
 
 ### Fixes
 - After the move to Tunewire's own server, an app that still held a sign-in from the old server sent it to the new one and was refused, so shared playlists showed "Offline". A sign-in is now only reused on the server that issued it.

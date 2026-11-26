@@ -59,13 +59,31 @@ function group(title, brand, ...rows) {
 /** Chips to jump between sections; the one in view is highlighted. */
 function settingsNav(body) {
   const cards = $$('.settings-card', body);
-  const nav = h('nav', { class: 'settings-nav', 'aria-label': 'Settings sections' }, ...cards.map((c) => h('button', { 'data-for': c.id, onclick: () => c.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, c.dataset.title)));
   const scroller = body.closest('.view');
+  // Scroll the page itself to the section, below the sticky tab bar.
+  // (scrollIntoView from the tab bar's own update below cancelled a smooth
+  // page scroll halfway on Android, so neither uses it.)
+  const go = (c) => {
+    // Where the tab bar sticks: the view's top + its padding + the bar's own `top`.
+    const stuck = parseFloat(getComputedStyle(scroller).paddingTop) + (parseFloat(getComputedStyle(nav).top) || 0);
+    const top = scroller.scrollTop + c.getBoundingClientRect().top - scroller.getBoundingClientRect().top - stuck - nav.offsetHeight - 8;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    // The tapped tab stays lit (a short section can't reach the top, so the
+    // next one would light up instead).
+    for (const b of nav.children) b.classList.toggle('on', b.dataset.for === c.id);
+    picked = Date.now();
+  };
+  let picked = 0;
+  const nav = h('nav', { class: 'settings-nav', 'aria-label': 'Settings sections' }, ...cards.map((c) => h('button', { 'data-for': c.id, onclick: () => go(c) }, c.dataset.title)));
   const io = new IntersectionObserver((entries) => {
     const top = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-    if (!top) return;
+    if (!top || Date.now() - picked < 1200) return;
     for (const b of nav.children) b.classList.toggle('on', b.dataset.for === top.target.id);
-    nav.querySelector('.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Keep the lit tab in view: the tab row scrolls sideways, nothing else.
+    const on = nav.querySelector('.on');
+    if (on && (on.offsetLeft < nav.scrollLeft || on.offsetLeft + on.offsetWidth > nav.scrollLeft + nav.clientWidth)) {
+      nav.scrollTo({ left: on.offsetLeft - 14, behavior: 'smooth' });
+    }
   }, { root: scroller, rootMargin: '-60px 0px -60% 0px' });
   cards.forEach((c) => io.observe(c));
   return nav;

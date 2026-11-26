@@ -77,7 +77,16 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
 
   // Keep the active tab in step with the page shown.
   const views = new Set(tabs.map((t) => t.id));
-  const sync = () => { if (!document.body.classList.contains('lib-open')) mark(views.has(state.view) ? state.view : ''); };
+  // Another page opened (from a menu, a link, a search) closes the Library
+  // sheet, or the page would open behind it.
+  let shown = state.view;
+  const sync = () => {
+    if (state.view !== shown) {
+      shown = state.view;
+      document.body.classList.remove('lib-open');
+    }
+    if (!document.body.classList.contains('lib-open')) mark(views.has(state.view) ? state.view : '');
+  };
   new MutationObserver(sync).observe($('.main') || document.body, { attributes: true, subtree: true, attributeFilter: ['hidden', 'class'] });
   sync();
 })();

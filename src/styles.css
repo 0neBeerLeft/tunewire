@@ -735,8 +735,8 @@ button.link:hover { text-decoration: underline; }
 @keyframes tw-shimmer { to { background-position: -150% 0; } }
 .pl-art.mix-big { width: 160px; height: 160px; border-radius: var(--r-sm); box-shadow: 0 10px 30px rgba(0,0,0,.3); }
 .home-empty { max-width: 520px; margin: 10px auto; }
-.home-empty .big { display: block; color: var(--accent); margin-bottom: 6px; }
-.home-empty .big svg { width: 34px; height: 34px; }
+.home-empty .big { color: var(--accent); } /* the round .empty .big, icon centred */
+.home-empty .big svg.i { width: 26px; height: 26px; }
 
 /* ---- Stat cards ---- */
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }

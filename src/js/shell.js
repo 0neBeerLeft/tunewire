@@ -28,7 +28,8 @@ $('#nav-menu').addEventListener('click', (e) => openMenu(e.currentTarget, [
   { label: 'Downloads', icon: 'download', onClick: () => showView('downloads') },
   { label: 'Local files', icon: 'folder', onClick: () => showView('local') },
   'sep',
-  { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: showShortcuts },
+  // Phones have no keyboard shortcuts.
+  isMobile ? null : { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: showShortcuts },
   { label: 'Check for updates', icon: 'refresh', onClick: () => checkForUpdate(true) },
 ]));
 

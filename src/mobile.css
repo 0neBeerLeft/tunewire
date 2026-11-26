@@ -267,7 +267,9 @@ body.mobile .jt-join-row .btn { height: 42px; }
 body.mobile .settings-nav { margin: 0 -14px; padding: 8px 14px; top: 0; }
 body.mobile .settings-card { padding: 4px 16px 6px !important; border-radius: var(--r-lg) !important; }
 body.mobile .setting { gap: 14px; padding: 14px 0; }
-body.mobile .setting:has(> select, > .actions, > .order-list, > .segmented, > input.input, > textarea) { flex-direction: column; align-items: stretch; gap: 10px; }
+body.mobile .setting:has(> select, > .actions, > .order-list, > .segmented, > input.input, > textarea, > .btn) { flex-direction: column; align-items: stretch; gap: 10px; }
+/* A lone button under its text: its own size, at the left. */
+body.mobile .setting > .btn { align-self: flex-start; }
 body.mobile .setting:has(> select, > .actions, > .order-list, > .segmented) > :not(.label) { max-width: none; width: 100%; }
 body.mobile .setting > .actions { justify-content: flex-start; flex-wrap: wrap; }
 body.mobile .setting select { height: 40px; }
@@ -303,3 +305,16 @@ body.mobile.np-full .queue { bottom: calc(var(--mini-h) + var(--safe-b)) !import
 /* Phones draw scrollbars over the content: no desktop gutter. */
 body.mobile * { scrollbar-width: none; scrollbar-gutter: auto !important; }
 body.mobile *::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Full-screen sheets have no frame (on older Android WebViews these faint
+   borders even showed as bright lines). */
+body.mobile .queue, body.mobile .sidebar, body.mobile .jam-side { border: 0 !important; box-shadow: none !important; }
+body.mobile.np-full .player-bar { border: 0 !important; box-shadow: none !important; }
+
+/* Touch screens: a tapped button doesn't keep its hover look (a grey square
+   stayed on Next); the press itself shows instead. */
+@media (hover: none) {
+  body.mobile .icon-btn:hover, body.mobile .transport .icon-btn:hover, body.mobile .sc-group .icon-btn:hover { background: none !important; }
+  body.mobile .icon-btn:active { background: color-mix(in srgb, var(--text) 12%, transparent) !important; border-radius: 50%; }
+}
+body.mobile .transport .icon-btn { border-radius: 50%; }

@@ -538,6 +538,7 @@ function openMenu(anchor, items, { onClose, at } = {}) {
   // Items: { label, icon?, sub? (second line), checked? (a checkmark, for
   // choices), onClick }, 'sep', or { label, heading: true }.
   for (const it of items) {
+    if (!it) continue; // an item left out (e.g. on phones)
     if (it === 'sep') { menu.append(h('hr')); continue; }
     if (it.heading) { menu.append(h('div', { class: 'menu-label' }, it.label)); continue; }
     const text = it.sub ? `<span class="mi-text"><span>${esc(it.label)}</span><small>${esc(it.sub)}</small></span>` : `<span class="mi-text"><span>${esc(it.label)}</span></span>`;

@@ -215,7 +215,11 @@ function renderSettings() {
     group('Backup', null, ...backupSettingsRows()),
     group('Tools', null,
       updateSettingsRow(),
-      settingRow('yt-dlp', `${esc($('#health').title || '')}<br><code>${esc(state.ytdlpPath || '')}</code>`, recheck(checkHealth)),
+      // Android: yt-dlp is only the fallback there (songs play without it), so
+      // its status is a calm line, not a raw error with file paths.
+      settingRow(ANDROID ? 'yt-dlp (fallback)' : 'yt-dlp', ANDROID
+        ? ($('#health').classList.contains('ok') ? `Ready (${esc($('#health .health-text')?.textContent || '')}). Only used when a song can't load the usual way.` : 'Not running on this device. You don’t need it: YouTube, YouTube Music and Spotify songs play without it.')
+        : `${esc($('#health').title || '')}<br><code>${esc(state.ytdlpPath || '')}</code>`, recheck(checkHealth)),
       settingRow('yt-dlp copy', 'Use the yt-dlp installed on your system, or let Tunewire keep its own up-to-date copy (official build from GitHub, checksum-verified).', ytdlpControl()),
       settingRow('Clear cache', 'Frees the space Tunewire uses to load things faster: saved song links, search results, cover images and temporary song files. Your library, playlists, history and settings stay. Things load a little slower once afterwards.', clearCacheButton()),
       settingRow('Keyboard shortcuts', null, h('button', { class: 'btn small', onclick: showShortcuts }, 'Show'))));

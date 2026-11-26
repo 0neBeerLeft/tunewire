@@ -173,6 +173,8 @@ let androidUpdateCheck = null;
     }
   }
   androidUpdateCheck = check;
-  setTimeout(check, 8000);
-  setInterval(check, 6 * 3600 * 1000);
+  // Automatic checks follow Settings → Updates → Auto; "Check now" always works.
+  const auto = () => { if (state.settings?.auto_update !== false) check(); };
+  setTimeout(auto, 8000);
+  setInterval(auto, 6 * 3600 * 1000);
 })();

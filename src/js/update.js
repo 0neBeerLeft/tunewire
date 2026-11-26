@@ -164,7 +164,9 @@ function updateSettingsRow() {
   const label = h('span', {}, 'Updates');
   appVersion().then((v) => { label.textContent = `Updates · version ${v}`; });
   return h('div', { class: 'setting' },
-    h('div', { class: 'label' }, label, h('small', {}, 'With Auto on, new versions download in the background (verified with a signature) and install when you restart.')),
+    h('div', { class: 'label' }, label, h('small', {}, /Android/i.test(navigator.userAgent)
+      ? 'With Auto on, Tunewire looks for a new version now and then and shows an Update button; tapping it downloads the new app to install.'
+      : 'With Auto on, new versions download in the background (verified with a signature) and install when you restart.')),
     h('div', { class: 'actions' },
       h('label', { class: 'actions', title: 'Check on startup' }, h('span', { class: 'switch' }, (() => {
         const i = h('input', { type: 'checkbox', checked: state.settings.auto_update !== false });

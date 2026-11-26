@@ -345,3 +345,8 @@ body.mobile .wrapped .w-close { top: calc(28px + var(--safe-t)); right: 16px; }
 /* The Listen together session: a solid sheet (its glass showed the page
    behind it, blurred, on a phone). */
 body.mobile .jam-side { background: var(--panel-solid, #0d0d0d) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* Search suggestions: the screen's width under the top bar (the search box
+   alone is too narrow for song titles). */
+body.mobile .suggest { position: fixed !important; left: 8px !important; right: 8px !important; top: calc(52px + var(--safe-t)) !important; width: auto !important; max-width: none !important; max-height: calc(100vh - 52px - var(--safe-t) - var(--mini-h) - var(--mnav-h) - var(--safe-b) - 16px) !important; overflow-y: auto; z-index: 60; }
+body.mobile .suggest .suggest-item { min-height: 44px; }

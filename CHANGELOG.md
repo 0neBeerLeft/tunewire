@@ -34,6 +34,7 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 - Tidier player bar, window buttons, empty and error screens, and rounder corners that match everywhere
 
 **Fixes**
+- Phones with an older Android WebView: opening Settings no longer fills the screen with "Something went wrong" errors (the equalizer graph), and the graph stops working in the background when you leave Settings (saves battery)
 - Your Library's Recents order is the playlists you played last, first, and it's kept after a restart; opening a playlist no longer makes the list jump
 - The buttons in the player bar line up (every group is the same height)
 - Android: no more "Songs can't play right now" warning at startup when songs play fine

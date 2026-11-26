@@ -795,7 +795,7 @@ function askLibrarySync() {
   const input = h('input', { type: 'checkbox', checked: true });
   const m = openModal({
     title: 'Your playlists on all your devices?',
-    subtitle: 'Tunewire can keep your playlists and Liked Songs in sync on every computer you sign in to.',
+    subtitle: 'Tunewire can keep your playlists and Liked Songs in sync on every device you sign in to.',
     body: h('div', { class: 'privacy-list' },
       h('label', { class: 'setting' },
         h('div', { class: 'label' }, 'Sync my library', h('small', {}, 'Private online copies only you can see. Change it any time in Settings → Account.')),

@@ -199,7 +199,7 @@ const SIGNIN_SLIDES = [
   { icon: 'sparkle', title: 'Music is better together', text: 'Tunewire works fine without an account. Sign in, and it connects you to the people who listen with you.' },
   { icon: 'headphones', title: 'Listen Together', text: 'Start a session and send the link. Everyone hears the same song at the same moment, chats, suggests songs and votes to skip.' },
   { icon: 'friends', title: 'Friends', text: 'See what friends are playing, compare your Wrapped and climb the friends’ leaderboard. Nothing is shared until you say so.' },
-  { icon: 'library', title: 'Your library, everywhere', text: 'Playlists and Liked Songs on every computer you use. Share a playlist with a link, or build one with friends.' },
+  { icon: 'library', title: 'Your library, everywhere', text: 'Playlists and Liked Songs on every device you use. Share a playlist with a link, or build one with friends.' },
 ];
 
 /** Shows the intro when nothing else is on screen; at most once per install. */

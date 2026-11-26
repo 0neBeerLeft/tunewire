@@ -377,8 +377,25 @@ function eqGraph(gains, onChange, isOn) {
   const fx = (f) => PAD.l + (Math.log(f / 20) / Math.log(1000)) * (W - PAD.l - PAD.r);
   const gy = (db) => PAD.t + (1 - (db + EQ_RANGE) / (2 * EQ_RANGE)) * (H - PAD.t - PAD.b);
   const yToDb = (y) => ((1 - (y - PAD.t) / (H - PAD.t - PAD.b)) * 2 - 1) * EQ_RANGE;
-  const cssVar = (name, dflt) => getComputedStyle(el).getPropertyValue(name).trim() || dflt;
-  const mix = (c, pct) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+  // Theme colors as plain rgba() numbers. The canvas on older WebViews
+  // (Android 113 and before) can't read color-mix() or color(srgb ...): a
+  // gradient then throws, a stroke silently keeps the last color.
+  const probe = el.appendChild(h('span', { hidden: true }));
+  const rgba = (css) => {
+    // Already plain numbers (most calls, every frame): no style lookup.
+    const plain = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/.exec(css);
+    if (plain) return [+plain[1], +plain[2], +plain[3], plain[4] === undefined ? 1 : +plain[4]];
+    probe.style.color = '';
+    probe.style.color = css;
+    const v = getComputedStyle(probe).color;
+    const n = (v.match(/[\d.]+/g) || ['255', '255', '255']).map(Number);
+    const k = v.startsWith('color(') ? 255 : 1; // color(srgb 0.96 0.96 0.96 / 0.5)
+    return [n[0] * k, n[1] * k, n[2] * k, n[3] ?? 1];
+  };
+  const str = ([r, g, b, a]) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${+a.toFixed(3)})`;
+  const cssVar = (name, dflt) => str(rgba(`var(${name}, ${dflt})`));
+  // The color at pct% of its opacity.
+  const mix = (c, pct) => { const [r, g, b, a] = rgba(c); return str([r, g, b, a * pct / 100]); };
   const fmtDb = (g) => `${g > 0 ? '+' : ''}${g.toFixed(1)} dB`;
   const fmtHz = (f) => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
   const PTS = 240;
@@ -531,7 +548,9 @@ function eqGraph(gains, onChange, isOn) {
   // Spectrum: polled about 30 times a second while the graph is on screen
   // and the window is visible; bands rise fast and fall back smoothly.
   async function tick(t) {
-    if (!el.isConnected) { stop(); return; }
+    // Off screen (another page is open): stop; the resize observer below
+    // starts it again when the graph shows (it goes from 0 px to its size).
+    if (!el.isConnected || !el.offsetParent) { stop(); return; }
     raf = requestAnimationFrame(tick);
     if (document.hidden || pending || t - last < 33) return;
     last = t; pending = true;
@@ -558,7 +577,7 @@ function eqGraph(gains, onChange, isOn) {
     cancelAnimationFrame(raf);
     claimAnalyzer('eq', false);
   }
-  new ResizeObserver(() => { resize(); if (el.isConnected) start(); }).observe(canvas);
+  new ResizeObserver(() => { resize(); if (el.isConnected && el.offsetParent) start(); }).observe(canvas);
   return { el, refresh: draw };
 }
 

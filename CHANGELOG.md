@@ -3,6 +3,14 @@
 Each release's section is used as its GitHub release notes and shown in the
 app's update and "What's new" dialogs. Keep entries short and user-facing.
 
+## Unreleased
+
+### Android
+- Your Library on phones: the shortcuts are one row you swipe, so your playlists get the screen; bigger rows.
+- Home's Recently played shows song titles again.
+- Notifications are solid cards instead of see-through text.
+- Closing the app from recent apps no longer shows a crash.
+
 ## v2.4.0
 
 **Songs start much faster**

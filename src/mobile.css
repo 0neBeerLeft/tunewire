@@ -381,3 +381,32 @@ body.mobile .menu.menu-sheet::before { content: ""; display: block; width: 40px;
 body.mobile .menu.menu-sheet button[role^=menuitem] { min-height: 50px; padding: 0 16px; font-size: 15.5px; border-radius: var(--r-md); }
 body.mobile .menu.menu-sheet .menu-label { padding: 10px 16px 4px; }
 @keyframes menu-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+
+/* Library: the sheet scrolls as one page. The shortcuts were a tall list
+   (seven rows) that left the playlists a strip at the bottom with its own
+   scroll; now they're one row of pills you swipe, and the playlists get
+   the screen. Discover and Listen together are tabs already. */
+body.mobile .sidebar { overflow-y: auto; overscroll-behavior: contain; }
+body.mobile .sidebar .lib-list { flex: none; min-height: auto; overflow: visible; padding: 2px 8px 16px; }
+body.mobile .lib-head { padding-top: 8px; padding-bottom: 6px; }
+body.mobile .lib-nav {
+  flex-direction: row !important; gap: 8px !important; overflow-x: auto; scrollbar-width: none;
+  padding: 2px 16px 12px !important; scroll-padding: 0 16px;
+}
+body.mobile .lib-nav::-webkit-scrollbar { display: none; }
+body.mobile .lib-nav .nav-item[data-view=discover], body.mobile .lib-nav .nav-item[data-view=together] { display: none !important; }
+body.mobile .lib-nav .nav-item {
+  flex: none; height: 38px; gap: 8px; padding: 0 14px 0 12px; border-radius: var(--r-lg);
+  background: var(--bg-elev-2); color: var(--text); font-size: 13.5px; font-weight: 600;
+}
+body.mobile .lib-nav .nav-item svg.i { width: 17px; height: 17px; }
+body.mobile .lib-nav .nav-item.active { background: var(--bg-elev-2); }
+body.mobile .lib-nav .nav-item.active svg.i { color: inherit; }
+body.mobile .lib-chips { padding: 0 16px 10px; }
+body.mobile .app .lib-tools { display: flex !important; padding: 0 12px 4px 8px; }
+body.mobile .lib-item { grid-template-columns: 56px minmax(0, 1fr) auto !important; padding: 8px; }
+body.mobile .lib-item .lib-art, body.mobile .lib-item > img, body.mobile .lib-item > .thumb { width: 56px; height: 56px; }
+
+/* Toasts sit over the page: a solid card, not see-through text on text. */
+body.mobile .toast { background: var(--panel-solid, #181818); }
+body.mobile .lib-name { font-size: 15px; }

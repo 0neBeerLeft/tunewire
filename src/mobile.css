@@ -334,3 +334,7 @@ body.mobile .profile-tabs button { flex: none; white-space: nowrap; }
 
 /* The sleep timer in the Now playing header (moved there by mobile.js). */
 body.mobile .queue-head #btn-sleep { display: grid !important; position: relative; margin-left: auto; }
+
+/* Wrapped: the progress bars and close button below the status bar. */
+body.mobile .wrapped .w-bars { top: calc(14px + var(--safe-t)); }
+body.mobile .wrapped .w-close { top: calc(28px + var(--safe-t)); right: 16px; }

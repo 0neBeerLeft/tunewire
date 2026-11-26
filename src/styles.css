@@ -815,9 +815,9 @@ button.link:hover { text-decoration: underline; }
 .w-slide p { margin: 0; font-size: 20px; font-weight: 600; opacity: .9; }
 .w-slide .w-sub { font-size: 16px; font-weight: 500; opacity: .75; max-width: 420px; line-height: 1.45; margin-top: 6px; }
 .w-kicker { font-size: 13px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; opacity: .8; }
-.w-big { font-size: 54px; font-weight: 900; line-height: 1.02; letter-spacing: -.03em; max-width: 100%; overflow-wrap: anywhere; }
-.w-big.huge { font-size: 150px; letter-spacing: -.06em; background: linear-gradient(135deg, #fff, color-mix(in srgb, var(--accent) 60%, #fff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.w-big.count { font-size: 96px; font-variant-numeric: tabular-nums; }
+.w-big { font-size: min(54px, 12vw); font-weight: 900; line-height: 1.02; letter-spacing: -.03em; max-width: 100%; overflow-wrap: anywhere; }
+.w-big.huge { font-size: min(150px, 25vw); letter-spacing: -.06em; padding: 0 .08em; /* the gradient text clipped the last letter */ background: linear-gradient(135deg, #fff, color-mix(in srgb, var(--accent) 60%, #fff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.w-big.count { font-size: min(96px, 20vw); font-variant-numeric: tabular-nums; }
 .w-hint { font-size: 13px !important; opacity: .5 !important; margin-top: 30px !important; }
 .w-photo { width: 260px; height: 260px; object-fit: cover; border-radius: var(--r-md); box-shadow: 0 20px 60px rgba(0,0,0,.5); margin: 10px 0; }
 .w-photo.round { border-radius: 50%; }

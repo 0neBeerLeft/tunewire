@@ -49,7 +49,12 @@ app's update and "What's new" dialogs. Keep entries short and user-facing.
 **Android (new)**
 - Tunewire for Android: the same app with a phone layout and a full-screen player, playback that keeps going with the screen off, and controls on the lock screen and notification
 - The back gesture closes what's open (a menu, a dialog, the library, the full player) and goes back a page; only on Home does it leave the app
-- Sleep timer in the full player, Settings shows only what works on a phone, and many layout fixes (profile, Wrapped, settings tabs, song rows)
+- The buttons on the lock screen, the notification and headphones work (they did nothing before)
+- Signing in with Discord (and Spotify, Last.fm) opens the browser on the phone
+- Menus slide up from the bottom of the screen, with big rows
+- Reorder the queue by dragging a song's grip
+- Sleep timer in the full player; Settings shows only what works on a phone
+- Many layout fixes: profile, Wrapped, settings tabs, search suggestions, dialogs, song rows, the Listen together screen
 
 ## v2.3.0
 

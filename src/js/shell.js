@@ -289,8 +289,14 @@ function openSleepTimer(anchor) {
   // Anchored by its bottom edge: it grows upwards when the countdown appears.
   const r = anchor.getBoundingClientRect();
   pop.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - pop.offsetWidth / 2, window.innerWidth - pop.offsetWidth - 8))}px`;
-  pop.style.top = 'auto';
-  pop.style.bottom = `${Math.max(8, window.innerHeight - r.top + 10)}px`;
+  // Above the button; below it when there's no room (a button at the top).
+  if (r.top - 10 >= pop.offsetHeight + 8) {
+    pop.style.top = 'auto';
+    pop.style.bottom = `${Math.max(8, window.innerHeight - r.top + 10)}px`;
+  } else {
+    pop.style.bottom = 'auto';
+    pop.style.top = `${Math.min(r.bottom + 10, window.innerHeight - pop.offsetHeight - 8)}px`;
+  }
   pop.onClose = () => clearInterval(tick);
   openMenuEl = pop;
 }

@@ -318,3 +318,19 @@ body.mobile.np-full .player-bar { border: 0 !important; box-shadow: none !import
   body.mobile .icon-btn:active { background: color-mix(in srgb, var(--text) 12%, transparent) !important; border-radius: 50%; }
 }
 body.mobile .transport .icon-btn { border-radius: 50%; }
+
+/* ---- profile ---------------------------------------------------------------- */
+body.mobile .profile-head { margin: -18px -14px 0; }
+body.mobile .profile-banner { height: 130px; }
+body.mobile .profile-id { padding: 0 16px; margin-top: -48px; gap: 12px 14px; }
+body.mobile .profile-avatar-box, body.mobile .profile-avatar { width: 92px !important; height: 92px !important; }
+body.mobile .profile-id > .grow { flex: 1 1 150px; min-width: 0; }
+body.mobile .profile-name { font-size: 28px !important; }
+body.mobile .profile-counts { gap: 4px 12px; font-size: 13px; }
+/* Buttons on their own row under the name. */
+body.mobile .profile-actions { flex: 1 0 100%; padding-bottom: 0; }
+body.mobile .profile-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 20px -14px 14px; padding: 0 14px; }
+body.mobile .profile-tabs button { flex: none; white-space: nowrap; }
+
+/* The sleep timer in the Now playing header (moved there by mobile.js). */
+body.mobile .queue-head #btn-sleep { display: grid !important; position: relative; margin-left: auto; }

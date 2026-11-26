@@ -10,7 +10,14 @@ async function updateSettings(patch) {
   } catch (e) { toast(errMsg(e), 'error'); }
 }
 
+/** Android has no tray, output picker, spotDL, Discord client, system yt-dlp
+ *  or keyboard: these settings don't show there. */
+const ANDROID = /Android/i.test(navigator.userAgent);
+const ANDROID_HIDDEN = new Set(['Close to tray', 'Output device', 'spotDL (optional fallback)', 'Spotify app credentials (spotDL)', 'yt-dlp copy', 'Keyboard shortcuts']);
+const hiddenHere = (label) => ANDROID && ANDROID_HIDDEN.has(label);
+
 function settingToggle(label, help, key) {
+  if (hiddenHere(label)) return null;
   const input = h('input', { type: 'checkbox', checked: !!state.settings[key] });
   input.addEventListener('change', async () => {
     // Answering here counts as answering the first-run question.
@@ -26,6 +33,7 @@ function settingToggle(label, help, key) {
 }
 
 function settingRow(label, help, control) {
+  if (hiddenHere(label)) return null;
   return h('div', { class: 'setting' }, h('div', { class: 'label' }, label, help ? h('small', { html: help }) : null), control);
 }
 
@@ -51,6 +59,7 @@ const GROUP_ICONS = { Account: 'user', Appearance: 'palette', Playback: 'play', 
 const groupId = (title) => `set-${title.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')}`;
 
 function group(title, brand, ...rows) {
+  if (ANDROID && title === 'Discord') return null; // Rich Presence needs the Discord desktop app
   const ico = brand ? plogo(brand) : icon(GROUP_ICONS[title] || 'sliders');
   return h('section', { class: `group settings-card ${brand || ''}`, id: groupId(title), 'data-title': title },
     h('h2', { html: `<span class="sc-ico">${ico}</span><span>${esc(title)}</span>` }), h('div', { class: 'sc-rows' }, ...rows));
@@ -341,7 +350,7 @@ function eqSetting() {
     updateSettings({ eq_enabled: enabled.checked });
   });
   return h('div', { class: 'setting eq-setting' },
-    h('div', { class: 'label' }, 'Equalizer', h('small', {}, 'Drag a band up or down. Double-click to reset it, scroll to fine-tune, or select the graph and use the arrow keys. While a song plays, its sound moves behind the curve.')),
+    h('div', { class: 'label' }, 'Equalizer', h('small', {}, isMobile ? 'Drag a band up or down, or tap its chip below the graph. While a song plays, its sound moves behind the curve.' : 'Drag a band up or down. Double-click to reset it, scroll to fine-tune, or select the graph and use the arrow keys. While a song plays, its sound moves behind the curve.')),
     h('div', { class: 'actions eq-actions' }, preset, reset, status, h('label', { class: 'switch' }, enabled, h('span'))),
     graph.el);
 }

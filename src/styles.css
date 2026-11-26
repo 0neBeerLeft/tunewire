@@ -1059,6 +1059,10 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .t-title { font-size: 15px; font-weight: 500; color: var(--text); }
 .t-sub { font-size: 13.5px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; min-width: 0; }
 .t-sub .t-artists { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A note after the artist ("3 h ago from YouTube") gives way first: the
+   artist keeps its name (it was cut to "Daft P" on phones). */
+.t-sub .t-artists { flex-shrink: 0; max-width: 60%; }
+.t-sub > .faint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .t-sub .t-artists button:hover, .t-album button:hover { color: var(--text); text-decoration: underline; }
 .track:hover .t-sub, .track.selected .t-sub, .track:hover .t-album, .track.selected .t-album { color: var(--text); }
 .t-explicit { display: none; }

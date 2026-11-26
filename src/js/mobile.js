@@ -22,6 +22,10 @@ const isMobile = /Android/i.test(navigator.userAgent) || new URLSearchParams(loc
     pad();
     window.addEventListener('resize', debounce(pad, 300));
   }
+  // The sleep timer lives in the player bar's side controls, which phones
+  // don't show: it sits in the Now playing sheet's header instead.
+  const sleepBtn = $('#btn-sleep');
+  if (sleepBtn) $('#panel-close')?.before(sleepBtn);
   // Start on the page, not with the side panel covering it.
   app.classList.add('queue-hidden');
   app.classList.remove('lib-collapsed'); // the library is a full sheet here

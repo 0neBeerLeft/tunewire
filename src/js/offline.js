@@ -105,7 +105,7 @@ async function renderDownloads() {
   const list = $('#dl-list');
   const dl = state.downloads;
   const total = dl.reduce((s, d) => s + d.size, 0);
-  $('#dl-meta').textContent = dl.length ? `${dl.length} songs, ${fmtSize(total)}` : '';
+  $('#dl-meta').textContent = dl.length ? `${songCount(dl.length)}, ${fmtSize(total)}` : '';
   if (!dl.length) {
     $('#dl-head').hidden = true;
     list.replaceChildren(h('div', { class: 'empty' }, h('p', {}, 'No downloads yet.'), h('p', { class: 'small' }, 'Use “Download” in a song’s menu, or on an album or playlist.')));
@@ -157,7 +157,7 @@ function renderLocal() {
     } }))));
   const q = $('#local-filter').value.trim().toLowerCase();
   const shown = q ? localTracks.filter((t) => `${t.title} ${t.artist} ${t.versions[0]?.album || ''}`.toLowerCase().includes(q)) : localTracks;
-  $('#local-meta').textContent = localTracks.length ? `${localTracks.length} songs in ${folders.length} folder${folders.length === 1 ? '' : 's'}` : '';
+  $('#local-meta').textContent = localTracks.length ? `${songCount(localTracks.length)} in ${folders.length} folder${folders.length === 1 ? '' : 's'}` : '';
   const list = $('#local-list');
   if (!folders.length) {
     $('#local-head').hidden = true;
@@ -184,7 +184,7 @@ $('#local-add').addEventListener('click', async () => {
   try {
     const n = await call('add_local_folder', { path: dir });
     state.settings = await call('get_settings');
-    toast(`${n} songs in your local library`, 'ok');
+    toast(`${songCount(n)} in your local library`, 'ok');
   } catch (e) { toast(errMsg(e), 'error'); }
 });
 $('#local-rescan').addEventListener('click', async () => {
